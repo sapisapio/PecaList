@@ -33,6 +33,13 @@ export function saveStoreSoon(name, getData, delayMs = 400) {
   }, delayMs));
 }
 
+export async function deleteStore(name) {
+  clearTimeout(timers.get(name));
+  timers.delete(name);
+  if (tauri) await tauri.core.invoke('delete_store', { name });
+  else localStorage.removeItem(LOCAL_PREFIX + name);
+}
+
 export async function saveStoreNow(name, data) {
   const text = JSON.stringify(data);
   if (tauri) await tauri.core.invoke('save_store', { name, data: text });

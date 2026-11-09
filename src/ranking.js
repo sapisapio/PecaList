@@ -57,3 +57,44 @@ export function recordPeaks(data, channels, now = new Date()) {
 export function rankRows(data, kind, period) {
   return [...(data[kind]?.[period] || [])].sort((a, b) => b.listeners - a.listeners || a.at - b.at || a.name.localeCompare(b.name, 'ja'));
 }
+
+// ---- 保存（月ごとのファイル） ----
+// 1年分を1つのファイルにすると、更新のたびに全体（1年で 10〜20MB）を書き直すことになる。
+// そこで「ranking-YYYY-MM」に、その月の日別とその月の月別だけを入れ、書き直すのは今の月だけにする。
+export const MONTHS_KEPT = 24;
+export const monthFileName = (month) => `ranking-${month}`;
+
+// 今の月から、さかのぼって count か月分の「YYYY-MM」（新しい順）
+export function recentMonths(now, count = MONTHS_KEPT, skip = 0) {
+  const base = new Date(rankDay(now) + 'T00:00:00');
+  const out = [];
+  for (let i = skip; i < skip + count; i++) {
+    const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+    out.push(dateKey(d).slice(0, 7));
+  }
+  return out;
+}
+
+// ある月の分だけを取り出す（保存用）
+export function monthPart(data, month) {
+  const part = emptyRanking();
+  for (const [day, rows] of Object.entries(data.days)) if (day.slice(0, 7) === month) part.days[day] = rows;
+  if (data.months[month]) part.months[month] = data.months[month];
+  return part;
+}
+
+// 保存してある分をまとめて1つにする。後ろにあるものほど優先（古い1ファイルの形を先に渡す）
+export function mergeParts(parts) {
+  const data = emptyRanking();
+  for (const p of parts) {
+    if (!p) continue;
+    Object.assign(data.days, p.days || {});
+    Object.assign(data.months, p.months || {});
+  }
+  return normalizeRanking(data);
+}
+
+// 中にある月（日別・月別のどちらかがある月）
+export function monthsIn(data) {
+  return [...new Set([...Object.keys(data.days).map((d) => d.slice(0, 7)), ...Object.keys(data.months)])];
+}

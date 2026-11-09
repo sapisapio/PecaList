@@ -1,8 +1,8 @@
 // PecaList — Copyright (C) 2026 sapisapio
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { linkify } from './links.js';
-import { rankDay, emptyRanking, normalizeRanking, recordPeaks, rankRows } from './ranking.js';
-import { loadStore, saveStoreSoon } from './store.js';
+import { rankDay, emptyRanking, recordPeaks, rankRows, recentMonths, monthFileName, monthPart, mergeParts, monthsIn } from './ranking.js';
+import { loadStore, saveStoreSoon, saveStoreNow, deleteStore } from './store.js';
 import { buildRankHead } from './rank-cols.js';
 
 export function initRankingUI(ctx) {
@@ -53,12 +53,27 @@ export function initRankingUI(ctx) {
     render();
   });
   return {
+    // 月ごとのファイル（ranking-YYYY-MM）を、残す期間の分だけ読む。
+    // 0.2.20 までの1つのファイル（ranking）があれば、月ごとに分けて書き直してから消す
     async load() {
-      try { data = normalizeRanking(await loadStore('ranking')); }
-      catch (e) { ctx.toast('ランキングを読み込めませんでした：' + e); }
+      try {
+        const now = new Date();
+        const old = await loadStore('ranking');
+        const parts = await Promise.all(recentMonths(now).map((m) => loadStore(monthFileName(m))));
+        data = mergeParts([old, ...parts]);
+        recordPeaks(data, [], now); // 残す期間より古いものを落とす
+        if (old) {
+          for (const m of monthsIn(data)) await saveStoreNow(monthFileName(m), monthPart(data, m));
+          await deleteStore('ranking');
+        }
+        // 残す期間を過ぎた月のファイルを消す（毎回、その先の1年分だけ確かめる）
+        for (const m of recentMonths(now, 12, recentMonths(now).length)) await deleteStore(monthFileName(m));
+      } catch (e) { ctx.toast('ランキングを読み込めませんでした：' + e); }
     },
     observe(channels) {
-      if (recordPeaks(data, channels)) saveStoreSoon('ranking', () => data);
+      // 書き直すのは今の月のファイルだけ
+      const month = rankDay(new Date()).slice(0, 7);
+      if (recordPeaks(data, channels)) saveStoreSoon(monthFileName(month), () => monthPart(data, month));
       if (ctx.isShown()) render();
     },
     render,

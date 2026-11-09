@@ -117,6 +117,19 @@ fn load_store(app: tauri::AppHandle, name: String) -> Result<Option<String>, Str
   }
 }
 
+/// 保存したものを消す（控えの .bak も）。なければ何もしない（ランキングの古い月を消すのに使う）
+#[tauri::command]
+fn delete_store(app: tauri::AppHandle, name: String) -> Result<(), String> {
+  let path = store_path(&app, &name)?;
+  for p in [path.with_extension("json.bak"), path] {
+    match std::fs::remove_file(&p) {
+      Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(format!("消せませんでした: {e}")),
+      _ => {}
+    }
+  }
+  Ok(())
+}
+
 /// 設定やフィルタを保存する。
 /// 書きかけで壊れないよう一時ファイルに書いてから置き換え、1つ前の内容を .bak に残す。
 #[tauri::command]
@@ -469,6 +482,7 @@ pub fn run() {
       launch,
       load_store,
       save_store,
+      delete_store,
       show_notification,
       read_sound_file,
       notify_layout,

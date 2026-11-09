@@ -11,12 +11,20 @@ fn hidden(c:&mut Command)->&mut Command { #[cfg(windows)] c.creation_flags(0x080
 
 fn runtime(app:&tauri::AppHandle)->Result<std::path::PathBuf,String>{
  let dir=super::store_path(app,"p2p")?.parent().unwrap().join("p2p-runtime").join(include_str!("../p2p-runtime-id.txt").trim());
- if dir.join("ready").exists()&&dir.join("node.exe").exists(){return Ok(dir)}
+ if dir.join("ready").exists()&&dir.join("node.exe").exists(){remove_old_runtimes(&dir);return Ok(dir)}
  std::fs::create_dir_all(&dir).map_err(|e|e.to_string())?;
  let zip=dir.join("runtime.zip");std::fs::write(&zip,include_bytes!("../p2p-runtime.zip")).map_err(|e|e.to_string())?;
  let output=hidden(Command::new("powershell.exe").args(["-NoProfile","-NonInteractive","-Command","$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath $env:PECALIST_RUNTIME_ZIP -DestinationPath $env:PECALIST_RUNTIME_DEST -Force"])).env("PECALIST_RUNTIME_ZIP",&zip).env("PECALIST_RUNTIME_DEST",&dir).output().map_err(|e|format!("P2Pの初回準備に失敗しました: {e}"))?;
  if !output.status.success(){return Err("P2P実行環境を展開できませんでした。P2PをOFFにして再試行してください".into())}
- let _=std::fs::remove_file(zip);std::fs::write(dir.join("ready"),b"1").map_err(|e|e.to_string())?;Ok(dir)
+ let _=std::fs::remove_file(zip);std::fs::write(dir.join("ready"),b"1").map_err(|e|e.to_string())?;remove_old_runtimes(&dir);Ok(dir)
+}
+
+/// 前の版の P2P の部品（展開すると1つ約130MB）を消す。部品の中身が変わった版は別のフォルダに展開するので、
+/// 消さないと版を上げるたびにたまっていく。動いている古い PecaList が使っていて消せなければ、そのまま（次の起動で消す）
+fn remove_old_runtimes(current:&std::path::Path){
+ let (Some(parent),Some(name))=(current.parent(),current.file_name()) else {return};
+ let Ok(entries)=std::fs::read_dir(parent) else {return};
+ for e in entries.flatten(){ if e.file_name()!=name && e.file_type().map(|t|t.is_dir()).unwrap_or(false){ let _=std::fs::remove_dir_all(e.path()); } }
 }
 impl Worker {
  fn start(app:&tauri::AppHandle)->Result<Self,String>{
