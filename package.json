@@ -1,0 +1,15 @@
+{
+  "name": "pecalist",
+  "private": true,
+  "version": "0.2.19",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "tauri": "tauri",
+    "prepare:p2p": "node scripts/prepare-p2p.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  },
+  "type": "module"
+}

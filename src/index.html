@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>PecaList</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="toolbar">
+  <button class="btn primary" id="refresh">⟳ 更新</button>
+  <div class="auto" id="auto" title="クリックで自動更新のオン/オフ"><span class="auto-lbl">自動更新</span><span class="bar"><i id="autobar"></i></span><span id="autotext"></span></div>
+  <label class="search">⌕ <input id="search" type="search" placeholder="チャンネル名・ジャンル・詳細を検索" spellcheck="false"></label>
+  <button class="btn" id="layout-toggle" title="1行／2行表示の切り替え" aria-pressed="false">☰ 1行</button>
+  <button class="btn" id="open-cols" title="表示する列">列</button>
+  <button class="btn" id="theme-toggle" title="テーマの切り替え">◐ 自動</button>
+  <button class="btn" id="dock-toggle" title="画面の右端に細く張り付ける">📌 <span class="dock-lbl">右に張り付ける</span></button>
+  <button class="btn" id="topmost-toggle" title="常に手前に表示" hidden>⧉</button>
+  <button class="btn" id="open-settings">⚙ 設定</button>
+</div>
+
+<div class="favbar" id="favbar" hidden>
+  <button class="lbl" id="favbar-toggle" title="クリックで畳む／開く"><span class="t">配信中のお気に入り</span> <span class="n" id="favbar-n"></span> <span class="arrow" id="favbar-arrow">▾</span></button>
+  <div class="chips" id="chips"></div>
+</div>
+
+<div class="tabs" id="tabs">
+  <div class="tab on" data-tab="all">チャンネル <span class="n" id="n-all">0</span></div>
+  <div class="tab" data-tab="fav">お気に入り <span class="n" id="n-fav">0</span></div>
+  <div class="tab" data-tab="new">新着 <span class="n" id="n-new">0</span></div>
+  <div class="tab" data-tab="rec">録画 <span class="n" id="n-rec">0</span></div>
+  <div class="tab" data-tab="ranking">ランキング</div>
+  <div class="tab" data-tab="activity">勢い</div>
+  <div class="tab" data-tab="p2p">P2P配信</div>
+  <div class="tab" data-tab="filter">フィルタ <span class="n" id="n-filter">0</span></div>
+  <button class="notice-btn" id="notice-btn" hidden>YPからのお知らせ <span class="n" id="n-notice">0</span></button>
+</div>
+<div class="notice-pop" id="notice-pop" hidden></div>
+
+<section class="p2p-view" id="p2p-view" hidden>
+ <div class="p2p-head"><h2>P2P配信</h2><button class="btn primary" id="p2p-toggle">P2P配信をON</button><span id="p2p-status" role="status">P2P配信はOFFです</span></div>
+ <p>YPを通さず、ツール利用者同士で掲載情報を共有します。</p>
+ <h3>自分の配信を掲載</h3><p>「掲載を開始」を押したチャンネルだけ公開します。</p>
+ <p id="p2p-local-error" class="sub"></p><div id="p2p-candidates"></div><p id="p2p-empty"></p><button class="btn" id="p2p-stop" disabled>掲載を終了</button>
+ <p class="sub">配信が終わると、掲載も自動で終わります。</p>
+ <label class="chk"><input type="checkbox" id="p2p-auto">P2Pのみの配信にも自動録画・通知・ランキング記録を適用する</label>
+ <p><label class="chk"><input type="checkbox" id="p2p-images">P2Pの配信画像を自動で読み込む</label><span class="sub">　画像の取得先にもアクセスします。</span></p>
+ <details class="p2p-block-settings"><summary>ブロックした掲載者</summary><p id="p2p-block-empty" class="sub">ブロックした掲載者はいません。一覧の右クリックから追加できます。</p><div id="p2p-blocks"></div></details>
+</section>
+<div class="filter-view" id="filter-view" hidden>
+  <div class="fv-bar">
+    <button class="btn primary" id="fv-add">＋ 追加</button>
+    <button class="btn" id="fv-edit">編集</button>
+    <button class="btn" id="fv-dup">複製</button>
+    <button class="btn" id="fv-del">削除</button>
+    <button class="btn" id="fv-up" title="上へ（上にあるフィルタが優先）">↑</button>
+    <button class="btn" id="fv-down" title="下へ">↓</button>
+    <span class="fv-sp"></span>
+    <button class="btn" id="fv-import">ペカレコの Filter.xml を読み込む</button>
+    <input type="file" id="fv-file" accept=".xml" hidden>
+  </div>
+  <div class="fv-list">
+    <table class="fv-table">
+      <colgroup><col style="width:40px"><col style="width:200px"><col style="width:110px"><col><col style="width:150px"><col style="width:150px"><col style="width:60px"></colgroup>
+      <thead><tr><th>有効</th><th>フィルタ名</th><th>種類</th><th>基本検索</th><th>AND検索</th><th>NOT検索</th><th class="num">一致</th></tr></thead>
+      <tbody id="fv-body"></tbody>
+    </table>
+    <div class="empty" id="fv-empty" hidden>フィルタはまだありません。「ペカレコの Filter.xml を読み込む」か「＋ 追加」から作れます。</div>
+  </div>
+</div>
+
+<div class="rec-view" id="rec-view" hidden>
+  <div class="rec-main">
+    <div class="sec-h">
+      <h2>録画中</h2><span class="sub" id="rec-live-n"></span>
+      <span class="sp"></span>
+      <button class="btn sm" id="rec-add">＋ 選んだチャンネルを録画</button>
+    </div>
+    <div class="live-list" id="rec-live"></div>
+
+    <div class="sec-h done-h">
+      <h2>録画したもの</h2>
+      <span class="sp"></span>
+      <button class="btn sm" id="rec-folder">フォルダを開く</button>
+    </div>
+    <div class="done-bar">
+      <label class="chk"><input type="checkbox" id="rec-all"> すべて選ぶ</label>
+      <span class="seg" id="rec-range">
+        <span data-range="today">今日</span><span data-range="yesterday">昨日</span><span data-range="week">この1週間</span><span data-range="all">すべて</span>
+      </span>
+      <span class="sp"></span>
+      <span class="sel-n" id="rec-sel-n"></span>
+      <button class="btn sm" id="rec-forget">一覧から消す（ファイルは残す）</button>
+      <button class="btn sm danger" id="rec-trash">ごみ箱へ</button>
+    </div>
+    <div id="rec-done"></div>
+  </div>
+  <aside class="rec-side">
+    <h3 id="rec-disk-h">保存先</h3>
+    <div class="disk" id="rec-disk"></div>
+    <h3>この1週間の自動録画</h3>
+    <div id="rec-weekly"></div>
+  </aside>
+</div>
+
+<section class="ranking-view" id="ranking-view" hidden>
+  <div class="ranking-bar">
+    <label>集計 <select id="rank-period"><option value="days">日別</option><option value="months">月別</option></select></label>
+    <input id="rank-date" type="date" aria-label="ランキングの日付">
+    <input id="rank-month" type="month" aria-label="ランキングの月" hidden>
+    <button class="btn" id="rank-current">今日</button>
+  </div>
+  <p class="hint">PecaList を起動している間に見えた、最高リスナー数です（1日は朝5時から）。</p>
+  <div id="rank-results"></div>
+</section>
+
+<section class="ranking-view" id="activity-view" hidden>
+    <p><label class="chk"><input type="checkbox" id="activity-enabled"> 掲示板の勢いを計測する（5分ごと）</label></p>
+    <p class="hint">掲示板全体で、5分間に増えたレス数です。</p>
+    <p class="hint" id="activity-status"></p>
+    <div id="activity-results"></div>
+</section>
+
+<div class="list" id="list">
+  <table id="table">
+    <colgroup id="cols"></colgroup>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+  <!-- 細い表示（右に張り付けたとき）の一覧と、マウスを乗せたときのカード -->
+  <div class="dlist" id="dlist"></div>
+  <div class="hcard" id="hcard" hidden></div>
+  <div class="empty" id="empty" hidden></div>
+</div>
+
+<div class="menu" id="menu"></div>
+
+<div class="detail" id="detail" hidden>
+  <div class="dt-art" id="dt-art"></div>
+  <div class="dt-content">
+  <div class="dt-head"><span class="dt-name" id="dt-name"></span><span class="dt-tags" id="dt-tags"></span></div>
+  <div class="dt-desc" id="dt-desc"></div>
+  <div class="dt-url" id="dt-url"></div>
+  <div class="dt-track" id="dt-track"></div>
+  <div class="dt-bar">
+    <button class="pill play" id="dt-play" title="再生">▶</button>
+    <button class="pill" id="dt-fav" title="お気に入り">☆</button>
+    <span class="pill stat" id="dt-lis"></span>
+    <span class="pill stat" id="dt-time"></span>
+    <span class="pill stat" id="dt-kbps"></span>
+  </div>
+  </div>
+</div>
+
+<div class="status">
+  <button class="st-toggle" id="detail-toggle" title="詳細パネルの表示/非表示">詳細 ▾</button>
+  <div class="right">
+    <button class="yp-error-trigger" id="yp-error-trigger" hidden aria-expanded="false" aria-controls="yp-error-pop">取得失敗</button>
+    <span id="st-time"></span>
+    <span class="zoom"><button id="font-dec" title="文字を小さく">A−</button><button id="font-inc" title="文字を大きく">A＋</button></span>
+  </div>
+</div>
+
+<section class="yp-error-pop" id="yp-error-pop" hidden aria-label="取得失敗したYP">
+  <div class="yp-error-head"><strong>取得失敗したYP</strong><button class="btn sm" id="yp-error-close" aria-label="閉じる">✕</button></div>
+  <button class="btn sm" id="yp-error-stop-all">取得失敗したYPを一括で未選択にする</button>
+  <div id="yp-error-list"></div>
+  <p class="hint">停止したYPは設定の「YP」で再び選択できます。</p>
+</section>
+<div class="toast" id="toast"></div>
+
+<div class="overlay" id="settings" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="settings-title">
+    <div class="dlg-head"><h2 id="settings-title">設定</h2></div>
+    <div class="dlg-body">
+      <section>
+        <h3>ペカレコから引っ越す</h3>
+        <p class="hint">ペカレコの設定とフィルタをまとめて取り込みます。</p>
+        <div class="row-btns"><button class="btn" id="mig-open">PeCaRecorder.exe を選ぶ</button></div>
+      </section>
+      <section>
+        <h3>YP</h3>
+        <div class="players yps" id="yps"></div>
+        <div class="row-btns">
+          <button class="btn" id="add-yp">YPを追加</button>
+          <button class="btn" id="add-default-yps">初めからあるYPを足す</button>
+        </div>
+      </section>
+      <section>
+        <h3>プレイヤー</h3>
+        <p class="hint">形式に合う一番上のプレイヤーで再生します。</p>
+        <div class="players" id="players"></div>
+        <div class="row-btns">
+          <button class="btn" id="add-player">プレイヤーを追加</button>
+        </div>
+        <details class="ph">
+          <summary>引数に使える記号</summary>
+          <div id="ph-list"></div>
+        </details>
+      </section>
+      <section>
+        <h3>ツール</h3>
+        <p class="hint">一覧の右クリック →「ツール」から起動します。</p>
+        <div class="players tools" id="tools"></div>
+        <div class="row-btns"><button class="btn" id="add-tool">ツールを追加</button></div>
+      </section>
+      <section>
+        <h3>ブロックリスト</h3>
+        <p class="hint">一致したチャンネルの録画・再生を止めます（正規表現）。</p>
+        <div class="players blocks" id="blocks"></div>
+        <div class="row-btns"><button class="btn" id="add-block">ブロックを追加</button></div>
+      </section>
+      <section>
+        <h3>掲示板ブラウザ</h3>
+        <p class="hint">空欄ならWebブラウザで開きます。</p>
+        <div class="field"><label>実行ファイル</label><input id="bbs-path" spellcheck="false" placeholder="例：C:\…\PCRPlayer\PCRBrowser.exe"><button class="btn" id="bbs-browse">参照</button></div>
+        <div class="field"><label>開くURL（正規表現）</label><input id="bbs-regex" spellcheck="false"></div>
+      </section>
+      <section>
+        <h3>表示</h3>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-split-genre"> ジャンルを別の列に分ける</label></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-open-free"> 概要の &lt;Open&gt; / &lt;Free&gt; を表示する</label></div>
+        <div class="field"><label>お気に入りの色</label>
+          <span class="fav-pick">ライト <input type="color" id="opt-fav-light"></span>
+          <span class="fav-pick">ダーク <input type="color" id="opt-fav-dark"></span>
+          <button class="btn" id="fav-color-reset">初めの色に戻す</button>
+        </div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-fav-rowbg"> お気に入りの行に背景の色を付ける</label></div>
+      </section>
+      <section>
+        <h3>画像・関連リンク</h3>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-media-buttons"> 曲情報のURLボタンを2行一覧と詳細に表示する</label></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-list-artwork"> 2行の一覧の先頭に画像を表示する</label></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-detail-artwork"> 下の詳細パネルに画像を表示する</label></div>
+      </section>
+      <section>
+        <h3>通知</h3>
+        <div class="row-btns"><button class="btn" id="notify-test">通知をテストする</button><button class="btn" id="nlog-open">通知ログを見る</button></div>
+        <p class="hint">起動後に始まった配信だけ通知します。</p>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-notify-fav"> お気に入りが配信を始めたら通知する</label></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-notify-all"> 新しく始まった配信をすべて通知する</label></div>
+        <div class="field"><label>通知の出し方</label>
+          <select id="opt-notify-mode"><option value="auto">数秒で自動で消える</option><option value="sticky">配信が終わるか、確認するまで出し続ける</option></select>
+        </div>
+        <p class="hint">お気に入りごとの設定は、一覧の右クリックから。</p>
+        <div class="field"><label>消えるまでの秒数</label><input id="opt-notify-sec" type="number" min="2" max="120" style="flex:none;width:80px"></div>
+        <div class="field"><label>出す場所</label>
+          <select id="opt-notify-corner"><option value="br">右下</option><option value="tr">右上</option><option value="bl">左下</option><option value="tl">左上</option></select>
+        </div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-notify-hide"> 通知を配信に映さない（OBS などの画面取り込みに映らないようにする）</label></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-notify-flash"> タスクバーのアイコンを点滅させる</label></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-notify-win"> Windows の通知も出す（インストールした版のみ）</label></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-sound-on"> 通知音を鳴らす</label></div>
+        <div class="field"><label>通知音のファイル</label><input id="sound-path" spellcheck="false" placeholder="wav / mp3 / ogg"><button class="btn" id="sound-browse">参照</button></div>
+      </section>
+      <section>
+        <h3>録画</h3>
+        <div class="field"><label>保存先</label><input id="rec-dir" spellcheck="false"><button class="btn" id="rec-dir-browse">参照</button></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-rec-sub"> チャンネルごとにフォルダを作る</label></div>
+        <div class="field"><label>切れたとき待つ時間</label><input id="opt-rec-wait" type="number" min="1" max="360" style="flex:none;width:80px"> 分</div>
+        <p class="hint">この時間内に戻れば、同じファイルに続けて録画します。</p>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-rec-notify"> 録画を始めたとき・終わったときに通知する</label></div>
+      </section>
+      <section>
+        <h3>掲示板の勢い</h3>
+        <label class="chk"><input type="checkbox" id="opt-activity"> 掲示板の勢いを計測する（5分ごと・初期OFF）</label>
+      </section>
+      <section>
+        <h3>操作</h3>
+        <div class="field"><label>ダブルクリック</label>
+          <select id="dbl-action">
+            <option value="play">再生</option>
+            <option value="bbs">掲示板を開く</option>
+            <option value="contact">コンタクトURLを開く</option>
+            <option value="record">録画する</option>
+            <option value="none">何もしない</option>
+          </select>
+        </div>
+        <div class="field"><label>中クリック（ホイール）</label>
+          <select id="mid-action">
+            <option value="play">再生</option>
+            <option value="bbs">掲示板を開く</option>
+            <option value="contact">コンタクトURLを開く</option>
+            <option value="record">録画する</option>
+            <option value="none">何もしない</option>
+          </select>
+        </div>
+      </section>
+      <section>
+        <h3>PeerCast</h3>
+        <div class="field"><label>アドレス</label><input id="peercast" spellcheck="false" placeholder="localhost:7144"></div>
+      </section>
+    </div>
+    <div class="dlg-foot">
+      <span class="fe-err" id="settings-err"></span>
+      <button class="btn" id="settings-cancel">キャンセル</button>
+      <button class="btn primary" id="settings-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="fe" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="fe-title">
+    <div class="dlg-head"><h2 id="fe-title">フィルタの編集</h2></div>
+    <div class="dlg-body">
+      <section>
+        <div class="field"><label>フィルタ名</label><input id="fe-name" spellcheck="false"></div>
+        <div class="field"><label>種類</label>
+          <label class="chk"><input type="checkbox" id="fe-favorite"> お気に入り</label>
+          <label class="chk"><input type="checkbox" id="fe-ignore"> NG（一覧に出さない）</label>
+          <label class="chk"><input type="checkbox" id="fe-record"> 自動録画</label>
+          <label class="chk"><input type="checkbox" id="fe-enabled"> このフィルタを使う</label>
+        </div>
+        <div class="field"><label>配信開始の通知</label>
+          <select id="fe-notify">
+            <option value="default">全体の設定に従う</option>
+            <option value="sticky">常時（配信が終わるか確認するまで出す）</option>
+            <option value="auto">一瞬（数秒で消える）</option>
+            <option value="none">通知しない</option>
+          </select>
+        </div>
+      </section>
+      <section>
+        <h3>検索（正規表現）</h3>
+        <p class="hint">「A|B」でAかB。かっこなどの記号を文字として探すときは「\(」のように前に \ を付けます。</p>
+        <div class="cond" id="fe-base"></div>
+        <div class="cond" id="fe-and"></div>
+        <div class="cond" id="fe-not"></div>
+        <div class="field"><label>オプション</label>
+          <label class="chk"><input type="checkbox" id="fe-icase"> 大文字小文字を区別しない</label>
+          <label class="chk"><input type="checkbox" id="fe-width"> 全角半角を区別しない</label>
+        </div>
+      </section>
+      <section>
+        <h3>その他の条件（空欄は指定なし）</h3>
+        <div class="ranges" id="fe-ranges"></div>
+        <div class="field"><label>新着</label>
+          <select id="fe-new"><option value="">指定なし</option><option value="new">新着のみ</option><option value="notNew">新着以外</option></select>
+        </div>
+      </section>
+      <section>
+        <h3>表示の色</h3>
+        <div class="field"><label>文字色</label><label class="chk"><input type="checkbox" id="fe-text-on"> 使う</label><input type="color" id="fe-text"></div>
+        <div class="field"><label>背景色</label><label class="chk"><input type="checkbox" id="fe-bg-on"> 使う</label><input type="color" id="fe-bg"></div>
+      </section>
+      <p class="hint" id="fe-note"></p>
+    </div>
+    <div class="dlg-foot">
+      <span class="fe-err" id="fe-err"></span>
+      <button class="btn" id="fe-cancel">キャンセル</button>
+      <button class="btn primary" id="fe-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="mig" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="mig-title">
+    <div class="dlg-head"><h2 id="mig-title">ペカレコから引っ越す</h2></div>
+    <div class="dlg-body">
+      <section>
+        <p class="hint" id="mig-dir"></p>
+        <ul class="mig-list" id="mig-list"></ul>
+        <p class="hint" id="mig-skip"></p>
+      </section>
+      <section id="mig-filter-sec">
+        <h3>フィルタ</h3>
+        <div class="field" id="mig-filter-mode-row"><label>今あるフィルタ</label>
+          <select id="mig-filter-mode"><option value="replace">置き換える</option><option value="append">後ろに足す</option><option value="skip">取り込まない</option></select>
+        </div>
+        <div id="mig-auto-row">
+          <p class="hint" id="mig-auto-text"></p>
+          <div class="field"><label>自動録画</label>
+            <select id="mig-auto"><option value="off">止めておく（あとでフィルタごとに入れ直す）</option><option value="on">PecaList でも自動録画する</option></select>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="dlg-foot">
+      <span class="fe-err" id="mig-err"></span>
+      <button class="btn" id="mig-cancel">キャンセル</button>
+      <button class="btn primary" id="mig-go">取り込む</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="nlog" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="nlog-title">
+    <div class="dlg-head"><h2 id="nlog-title">通知ログ</h2></div>
+    <div class="dlg-body">
+      <div id="nlog-body"></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn" id="nlog-clear">記録を消す</button>
+      <button class="btn primary" id="nlog-close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ask" hidden>
+  <div class="dialog small" role="dialog" aria-labelledby="ask-title">
+    <div class="dlg-head"><h2 id="ask-title"></h2></div>
+    <div class="dlg-body"><p id="ask-text"></p></div>
+    <div class="dlg-foot" id="ask-btns"></div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

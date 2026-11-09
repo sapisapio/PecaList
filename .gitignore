@@ -1,0 +1,8 @@
+node_modules/
+
+# 組み立てで作るもの
+src-tauri/target/
+src-tauri/p2p-runtime.zip
+src-tauri/p2p-runtime-id.txt
+p2p/node.exe
+p2p/node_modules/

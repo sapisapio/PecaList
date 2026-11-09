@@ -1,0 +1,37 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "PecaList",
+  "version": "0.2.19",
+  "identifier": "jp.sapisapio.pecalist",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "PecaList",
+        "width": 1280,
+        "height": 760,
+        "minWidth": 160,
+        "minHeight": 320,
+        "resizable": true,
+        "label": "main"
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "publisher": "sapisapio",
+    "shortDescription": "PeerCast channel browser"
+  }
+}

@@ -1,0 +1,33 @@
+[package]
+name = "pecalist"
+version = "0.2.19"
+description = "PecaList"
+authors = ["sapisapio"]
+license = "GPL-3.0-or-later"
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "pecalist_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.5", features = [] }
+tauri-plugin-log = "2"
+reqwest = { version = "0.13.5", default-features = false, features = ["native-tls", "gzip", "charset", "http2", "system-proxy"] }
+encoding_rs = "0.8"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tokio = { version = "1", features = ["time", "sync"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+windows-sys = { version = "0.61", features = ["Win32_UI_Shell", "Win32_Graphics_Dwm", "Win32_Storage_FileSystem", "Win32_Foundation", "Win32_Networking_WinSock", "Win32_UI_WindowsAndMessaging"] }

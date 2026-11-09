@@ -1,0 +1,11 @@
+{
+  "name": "pecalist-p2p-share-prototype",
+  "version": "0.3.0",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "dependencies": {
+    "hyperdht": "6.36.0",
+    "hyperswarm": "4.17.2"
+  }
+}
