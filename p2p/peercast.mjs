@@ -33,7 +33,7 @@ export function candidates(channels,endpoints){
 
 export class LocalMonitor {
   constructor(node,{load=localChannels,now=Date.now}={}){
-    this.node=node;this.load=load;this.now=now;this.items=[];this.selected=null;this.error='';this.checkedAt=null;this.failedSince=null;this.notReceivingSince=null;this.lastSent=0;this.lastBody='';this.busy=false;this.closed=false;
+    this.node=node;this.load=load;this.now=now;this.items=[];this.selected=null;this.error='';this.checkedAt=null;this.failedSince=null;this.notReceivingSince=null;this.lastSent=0;this.lastBody='';this.busy=false;this.closed=false;this.hideListeners=false;
     // 実配信は監視結果が成功したときだけ更新する。
     node.publisher.renew=()=>{};
     this.timer=setInterval(()=>this.poll(),5000);
@@ -53,8 +53,8 @@ export class LocalMonitor {
     this.notReceivingSince=null;
     if(c.blocked){this.error=c.blocked;return;}
     // 経過時間は毎回変わるので、内容が変わったかどうかの比べ方からは外す（30秒ごとの生存更新で新しい値を送る）
-    const serialized=JSON.stringify({...c.body,uptime:0});
-    if(serialized!==this.lastBody||this.now()-this.lastSent>=30000){this.node.publisher.liveBody=structuredClone(c.body);this.node.publisher.publish('upsert');this.lastBody=serialized;this.lastSent=this.now();}
+    const body=this.shown(c.body),serialized=JSON.stringify({...body,uptime:0});
+    if(serialized!==this.lastBody||this.now()-this.lastSent>=30000){this.node.publisher.liveBody=structuredClone(body);this.node.publisher.publish('upsert');this.lastBody=serialized;this.lastSent=this.now();}
   }
   async poll(){
     if(this.busy||this.closed)return;this.busy=true;
@@ -67,8 +67,10 @@ export class LocalMonitor {
     // 押した時点で再取得し、古い候補の公開を防ぐ。
     const items=await this.load();if(this.closed)throw new Error('終了処理中です');this.reconcile(items);
     const c=this.items.find(c=>c.channelId===id);if(!c)throw new Error('配信元チャンネルが見つかりません');if(c.blocked)throw new Error(c.blocked);
-    this.node.publisher.start(c);this.selected=id;this.notReceivingSince=c.isReceiving?null:this.now();this.lastSent=this.now();this.lastBody=JSON.stringify({...c.body,uptime:0});this.node.emit('log',{event:'publication-started',channelId:id.slice(0,8)});
+    const body=this.shown(c.body);this.node.publisher.start({...c,body});this.selected=id;this.notReceivingSince=c.isReceiving?null:this.now();this.lastSent=this.now();this.lastBody=JSON.stringify({...body,uptime:0});this.node.emit('log',{event:'publication-started',channelId:id.slice(0,8)});
   }
+  // 「リスナー数を非表示にする」：YP と同じく、リスナー数とリレー数を -1（非表示）にして送る
+  shown(body){return this.hideListeners?{...body,listeners:-1,relays:-1}:body;}
   view(){return {items:this.items.map(c=>({...c,active:c.channelId===this.selected})),selected:this.selected,error:this.error,checkedAt:this.checkedAt};}
   close(){this.closed=true;clearInterval(this.timer);}
 }

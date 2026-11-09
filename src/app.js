@@ -45,6 +45,7 @@ const defaults = {
   p2pEnabled: false,
   p2pAutoActions: false,
   p2pArtworkEnabled: false,
+  p2pHideListeners: false, // P2P の掲載でリスナー数・リレー数を非表示（-1）にする
   p2pBlocked: [],
   activityEnabled: false, // 掲示板の勢い：ONの間だけ5分ごとに計測
   bbs: { path: '', urlRegex: '.*' },

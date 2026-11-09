@@ -17,6 +17,7 @@ try{
  const seq=n.publisher.seq;n.publisher.renew();assert.equal(n.publisher.seq,seq,'監視を迂回して生存更新しない');
  items[0].body.detail='変更';now+=5000;await m.poll();assert.equal(n.view().rows[0].detail,'変更');
  const seq2=n.publisher.seq;items[0].body.uptime+=5;now+=29000;await m.poll();assert.equal(n.publisher.seq,seq2,'経過時間が増えただけではすぐ送らない');now+=1000;await m.poll();assert.equal(n.publisher.seq,seq2+1);assert.equal(n.view().rows[0].uptime,3730,'生存更新で新しい経過時間を送る');assert(Number.isSafeInteger(n.view().rows[0].ageSeconds));
+ m.hideListeners=true;await m.poll();assert.equal(n.view().rows[0].listeners,-1,'リスナー数を非表示');assert.equal(n.view().rows[0].relays,-1);m.hideListeners=false;await m.poll();assert.equal(n.view().rows[0].listeners,8,'戻すとすぐ数を送る');
  items[0].status='Idle';await m.poll();assert.equal(n.view().rows.length,0);assert.equal(m.selected,null);
  items=candidates([raw()],ep);await m.start(cid);items=[];await m.poll();assert.equal(n.view().rows.length,0,'消失で終了');
  items=candidates([raw()],ep);await m.start(cid);fail=true;const last=n.publisher.seq;now+=5000;await m.poll();assert.equal(n.publisher.seq,last,'API失敗では更新しない');fail=false;now+=5000;await m.poll();assert.equal(m.selected,cid,'短いAPI障害から回復');

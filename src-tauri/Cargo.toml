@@ -1,6 +1,6 @@
 [package]
 name = "pecalist"
-version = "0.2.19"
+version = "0.2.20"
 description = "PecaList"
 authors = ["sapisapio"]
 license = "GPL-3.0-or-later"

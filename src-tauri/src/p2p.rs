@@ -60,11 +60,11 @@ impl P2p {pub fn shutdown(&self){if let Some(mut w)=self.0.lock().unwrap().take(
  let Ok(guard)=state.0.try_lock() else {return json!({"enabled":false,"preparing":true})};
  match guard.as_ref(){Some(w)=>{let s=w.shared.lock().unwrap();json!({"enabled":true,"data":s.view})},None=>json!({"enabled":false})}
 }
-#[tauri::command] pub async fn p2p_action(app:tauri::AppHandle,action:String,peercast:Option<String>,channel_id:Option<String>,blocked:Option<Vec<String>>)->Reply{
+#[tauri::command] pub async fn p2p_action(app:tauri::AppHandle,action:String,peercast:Option<String>,channel_id:Option<String>,blocked:Option<Vec<String>>,hide_listeners:Option<bool>)->Reply{
  tauri::async_runtime::spawn_blocking(move||{
   use tauri::Manager;let service=app.state::<P2p>();let mut guard=service.0.lock().unwrap();
   if action=="disable"{if let Some(mut w)=guard.take(){w.stop();}return Ok(json!({"ok":true}))}
-  if action=="enable"{let blocked=blocked.unwrap_or_default();if blocked.len()>512||blocked.iter().any(|k|k.len()!=60){return Err("掲載者ブロックの設定が正しくありません".into())}if guard.is_none(){*guard=Some(Worker::start(&app)?);}return guard.as_mut().unwrap().request(json!({"method":"configure","peercast":peercast.unwrap_or_else(||"localhost:7144".into()),"blocked":blocked}));}
+  if action=="enable"{let blocked=blocked.unwrap_or_default();if blocked.len()>512||blocked.iter().any(|k|k.len()!=60){return Err("掲載者ブロックの設定が正しくありません".into())}if guard.is_none(){*guard=Some(Worker::start(&app)?);}return guard.as_mut().unwrap().request(json!({"method":"configure","peercast":peercast.unwrap_or_else(||"localhost:7144".into()),"blocked":blocked,"hideListeners":hide_listeners.unwrap_or(false)}));}
   if !["start","stop"].contains(&action.as_str()){return Err("P2P操作が正しくありません".into())}
   let w=guard.as_mut().ok_or("先にP2P共有をONにしてください")?;
   w.request(json!({"method":action,"channelId":channel_id}))

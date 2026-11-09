@@ -9,7 +9,7 @@ PeerCast のチャンネル一覧ソフトです（Windows 用）。
 
 [Releases](https://github.com/sapisapio/PecaList/releases) から、どちらかをダウンロードします。
 
-- `PecaList_x.y.z.exe`：インストール不要。好きなフォルダに置いて起動します
+- `PecaList_x.y.z.zip`：インストール不要。展開してできた「PecaList」フォルダを好きな場所に置き、中の PecaList.exe を起動します
 - `PecaList_x.y.z_x64-setup.exe`：インストーラー
 
 **正式な配布はこの Releases だけです。** ほかの場所で配られているものは使わないでください。
@@ -24,7 +24,7 @@ PeerCast のチャンネル一覧ソフトです（Windows 用）。
 
 設定（settings.json など）は、**PecaList.exe と同じフォルダ**に保存します。
 
-- 新しい版にするときは、**同じフォルダで exe を上書き**してください。別のフォルダに置くと、設定は引き継がれません
+- 新しい版にするときは、新しい zip の PecaList.exe で、**今の PecaList フォルダの PecaList.exe を上書き**してください。別のフォルダに置くと、設定は引き継がれません
 - PecaList 専用のフォルダに置いてください（ほかのアプリの settings.json と混ざらないように）
 - 0.2.14 までの版の設定（%APPDATA% の中）は、初めて起動したときに自動で写します
 

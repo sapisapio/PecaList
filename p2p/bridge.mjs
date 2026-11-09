@@ -33,6 +33,7 @@ input.on('line',line=>{if(line.length>65536){quit();return;}queue=queue.then(asy
     const u=new URL('http://'+m.peercast);if(u.username||u.password||u.pathname!=='/'||u.search||u.hash||!u.hostname)throw new Error('ペカステの接続先が正しくありません');
     const blocked=m.blocked||[];if(!Array.isArray(blocked)||blocked.length>512||!blocked.every(publisherKeyValid))throw new Error('掲載者ブロックの設定が正しくありません');
     node.setBlocked(blocked);
+    monitor.hideListeners=m.hideListeners===true;
     node.accepting=true;
     if(!discoveryStarted&&process.env.PECALIST_P2P_LOCAL_ONLY!=='1'){discoveryStarted=true;node.startDiscovery();}
     if(monitor.selected&&u.origin!==base)monitor.stop('ペカステ接続先の変更');base=u.origin;await monitor.poll();

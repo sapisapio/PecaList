@@ -9,7 +9,7 @@ export function initP2pUI(ctx){
  function message(text){$('p2p-status').textContent=text;}
  async function command(action,channelId){if(working)return;working=true;$('p2p-toggle').disabled=true;try{
   message(action==='enable'?'P2Pを準備しています。初回は少し時間がかかります…':'処理中…');
-  await ctx.invoke('p2p_action',{action,peercast:ctx.settings.peercast,channelId:channelId||null,blocked:blocks().map(b=>b.publisher)});
+  await ctx.invoke('p2p_action',{action,peercast:ctx.settings.peercast,channelId:channelId||null,blocked:blocks().map(b=>b.publisher),hideListeners:Boolean(ctx.settings.p2pHideListeners)});
   if(action==='enable'||action==='disable'){ctx.settings.p2pEnabled=action==='enable';ctx.saveSettings();configured=ctx.settings.peercast;configuredBlocks=JSON.stringify(blocks());}
   await poll();
  }catch(e){message(String(e));ctx.toast(String(e));}finally{working=false;$('p2p-toggle').disabled=false;}}
@@ -30,8 +30,10 @@ export function initP2pUI(ctx){
   if(!s.preparing){const denied=new Set(blocks().map(b=>b.publisher)),rows=s.data?.rows||[],channels=receivedChannels(rows).filter(ch=>ch.p2pOwn||!denied.has(ch.publisher));const key=JSON.stringify(channels);if(key!==previous){previous=key;ctx.onChannels(channels);}}
  }catch(e){message(String(e));if(previous!=='[]'){previous='[]';ctx.onChannels([]);}}finally{refreshing=false;}}
  $('p2p-toggle').onclick=()=>command(view.enabled?'disable':'enable');$('p2p-stop').onclick=()=>command('stop');
+ // 掲載中に切り替えても、すぐ新しい掲載を送る（ペカステの接続先の設定し直しと同じ道を通る）
+ $('p2p-hide-listeners').checked=Boolean(ctx.settings.p2pHideListeners);$('p2p-hide-listeners').onchange=e=>{ctx.settings.p2pHideListeners=e.target.checked;ctx.saveSettings();if(view.enabled)command('enable');};
  $('p2p-auto').checked=Boolean(ctx.settings.p2pAutoActions);$('p2p-auto').onchange=e=>{ctx.settings.p2pAutoActions=e.target.checked;ctx.saveSettings();};
  $('p2p-images').onchange=e=>{ctx.settings.p2pArtworkEnabled=e.target.checked;ctx.saveSettings();ctx.onArtworkChange();};
  const timer=setInterval(()=>{if(!working&&view.enabled&&(configured!==ctx.settings.peercast||configuredBlocks!==JSON.stringify(blocks()))){command('enable');return;}if(!working)poll();},1500);
- return {async load(){$('p2p-auto').checked=Boolean(ctx.settings.p2pAutoActions);$('p2p-images').checked=Boolean(ctx.settings.p2pArtworkEnabled);ctx.settings.p2pBlocked=blocks();renderBlocks();if(ctx.settings.p2pEnabled)await command('enable');else await poll();},block,render:()=>render(view),close:()=>clearInterval(timer)};
+ return {async load(){$('p2p-auto').checked=Boolean(ctx.settings.p2pAutoActions);$('p2p-hide-listeners').checked=Boolean(ctx.settings.p2pHideListeners);$('p2p-images').checked=Boolean(ctx.settings.p2pArtworkEnabled);ctx.settings.p2pBlocked=blocks();renderBlocks();if(ctx.settings.p2pEnabled)await command('enable');else await poll();},block,render:()=>render(view),close:()=>clearInterval(timer)};
 }
