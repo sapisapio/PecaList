@@ -100,3 +100,18 @@ assert.deepEqual(roundPlan(36,activityInterval(60)),{gap:90000,round:3600000},'1
   assert.equal(m.snapshot().rows[0].count,0,'15分の間の差を数える');
 }
 console.log('activity interval tests ok');
+
+// 一覧の並びが変わっても、前の周で早く取った掲示板から取る（比べる期間が周の長さにそろう）
+{
+  let t=0;let order=['a','b','c'];const asked=[];
+  const m=createActivityMonitor({now:()=>t,channels:()=>order.map(n=>({name:n,contactUrl:`https://bbs.jpnkn.com/${n}/`})),fetch:async(url)=>{asked.push(url.split('/')[3]);return '100.dat<>スレ (1)';},onChange:()=>{}});
+  const g=roundPlan(3).gap;const step=async()=>{await m.tick();await new Promise(r=>setTimeout(r,0));};
+  m.setEnabled(true);await step();for(let i=0;i<2;i++){t+=g;await step();}
+  assert.deepEqual(asked,['a','b','c']);
+  order=['c','b','a'];asked.length=0;
+  t=ACTIVITY_INTERVAL;await step();for(let i=0;i<2;i++){t+=g;await step();}
+  assert.deepEqual(asked,['a','b','c'],'並びが逆になっても、前に早く取ったものから');
+  const el=m.snapshot().rows.map(r=>r.elapsed);
+  assert.ok(el.every(e=>e===ACTIVITY_INTERVAL),'どの掲示板も比べる期間が取得間隔と同じ');
+}
+console.log('activity order tests ok');

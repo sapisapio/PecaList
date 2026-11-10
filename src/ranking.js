@@ -15,17 +15,26 @@ export function normalizeRanking(value) {
   for (const kind of ['days', 'months']) {
     for (const [period, rows] of Object.entries(value?.[kind] || {})) {
       if (!(kind === 'days' ? /^\d{4}-\d{2}-\d{2}$/ : /^\d{4}-\d{2}$/).test(period) || !Array.isArray(rows)) continue;
-      data[kind][period] = rows.filter((r) => r && typeof r.name === 'string' && Number.isSafeInteger(r.listeners) && r.listeners >= 0 && Number.isFinite(r.at))
-        .map((r) => ({ name: r.name, listeners: r.listeners, at: r.at, detail: typeof r.detail === 'string' ? r.detail : '', ypName: typeof r.ypName === 'string' ? r.ypName : '' }));
+      data[kind][period] = onePerName(rows.filter((r) => r && typeof r.name === 'string' && Number.isSafeInteger(r.listeners) && r.listeners >= 0 && Number.isFinite(r.at))
+        .map((r) => ({ name: r.name, listeners: r.listeners, at: r.at, detail: typeof r.detail === 'string' ? r.detail : '', ypName: typeof r.ypName === 'string' ? r.ypName : '' })));
     }
   }
   return data;
 }
 
-// 日別は「配信者名＋配信詳細」、月別は「配信者名」で集計する。
-// 詳細は表示と同じジャンル・概要・コメントの文字列。人数やYPは配信識別に含めない。
-const peakKey = (kind, row) => JSON.stringify(kind === 'days'
-  ? [broadcasterKey(row.name), row.detail || ''] : [broadcasterKey(row.name)]);
+// 日別・月別とも「配信者名」ごとに1行。その期間でいちばん多かったときの配信内容を残す。
+// （0.2.24 までは日別を「配信者名＋配信内容」で分けていて、同じ名前が何行も並んでいた）
+const peakKey = (kind, row) => broadcasterKey(row.name);
+
+// 同じ配信者の行を1つにまとめる（いちばん多い人数の行。同じ人数なら先に見えたほう）
+function onePerName(rows) {
+  const best = new Map();
+  for (const r of rows) {
+    const key = broadcasterKey(r.name), prev = best.get(key);
+    if (!prev || r.listeners > prev.listeners || (r.listeners === prev.listeners && r.at < prev.at)) best.set(key, r);
+  }
+  return [...best.values()];
+}
 
 // 取得成功したYPの今回のデータだけを渡す。複数YPの人数は合計しない。
 export function recordPeaks(data, channels, now = new Date()) {

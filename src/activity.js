@@ -102,7 +102,10 @@ export function createActivityMonitor(ctx) {
       // 新しい1周：今配信している掲示板を集め直す
       const targets = activityTargets(ctx.channels());
       rows = new Map([...rows].filter(([key]) => targets.has(key)));
-      queue = [...targets.values()];
+      // 前の周で早く取った掲示板から順に取る（一覧の並びで決めると、前の周の最後に取った掲示板を
+      // 次の周の最初にまた取ってしまい、比べる期間が数分に縮む）。初めての掲示板は最後
+      const lastAt = (t) => rows.get(t.key)?.at ?? Infinity;
+      queue = [...targets.values()].sort((a, b) => lastAt(a) - lastAt(b));
       total = queue.length;
       plan = roundPlan(total, interval());
       roundStart = now;

@@ -46,26 +46,26 @@ assert.equal(longColor(200),'hsl(0 90% 48%)');
 assert.ok(longColor(55).startsWith('hsl(15 '),'途中は少しずつ赤に近づく');
 console.log('ranking and duration tests ok');
 
-// 同日に配信詳細が違えば、人数が低くても別枠で残す。月別は配信者につき1枠。
+// 日別・月別とも配信者ごとに1行。いちばん多かったときの配信内容を残す
 const sessions = emptyRanking();
 recordPeaks(sessions,[channel('Aさん',100,{detail:'朝のゲーム'})],now);
 recordPeaks(sessions,[channel('Aさん',60,{detail:'夜の雑談'})],now);
-assert.equal(sessions.days['2026-11-09'].length,2);
+assert.equal(sessions.days['2026-11-09'].length,1,'詳細が違っても同じ名前は1行');
+assert.equal(sessions.days['2026-11-09'][0].listeners,100);
+assert.match(sessions.days['2026-11-09'][0].detail,/朝のゲーム/);
+recordPeaks(sessions,[channel('Ａさん',120,{detail:'夜の雑談',ypName:'別YP'})],now);
+assert.equal(sessions.days['2026-11-09'].length,1,'全角・半角の違いも同じ名前');
+assert.match(sessions.days['2026-11-09'][0].detail,/夜の雑談/,'多くなったときの内容に変わる');
 assert.equal(sessions.months['2026-11'].length,1);
-assert.equal(sessions.months['2026-11'][0].listeners,100);
-assert.match(sessions.months['2026-11'][0].detail,/朝のゲーム/);
-recordPeaks(sessions,[channel('Aさん',150,{detail:'夜の雑談'})],tomorrow);
-assert.equal(sessions.months['2026-11'].length,1);
-assert.equal(sessions.months['2026-11'][0].listeners,150);
-assert.match(sessions.months['2026-11'][0].detail,/夜の雑談/);
-assert.equal(sessions.months['2026-11'][0].at,tomorrow.getTime());
-recordPeaks(sessions,[channel('Ａさん',110,{detail:'朝のゲーム',ypName:'別YP'})],now);
-assert.equal(sessions.days['2026-11-09'].length,2,'同じ詳細に戻ったときは既存枠を更新');
-assert.equal(rankRows(sessions,'days','2026-11-09')[0].listeners,110);
-const resumed = normalizeRanking(JSON.parse(JSON.stringify(sessions)));
-recordPeaks(resumed,[channel('Aさん',90,{detail:'朝のゲーム'})],now);
-assert.equal(resumed.days['2026-11-09'].length,2,'再起動後も詳細別の枠を維持');
-assert.equal(resumed.months['2026-11'][0].listeners,150,'低い別配信で月の最高値を上書きしない');
+assert.equal(sessions.months['2026-11'][0].listeners,120);
+// 0.2.24 までに保存した、同じ名前が何行もある日別も、読み込むと1行にまとまる
+const oldDay = { version:1, days:{'2026-11-09':[
+  {name:'Bさん',listeners:30,at:2,detail:'a',ypName:'SP'},{name:'Bさん',listeners:50,at:3,detail:'b',ypName:'SP'},
+  {name:'ｂさん',listeners:50,at:1,detail:'c',ypName:'SP'},{name:'Cさん',listeners:5,at:4,detail:'d',ypName:'SP'}]}, months:{} };
+const merged = normalizeRanking(oldDay).days['2026-11-09'];
+assert.equal(merged.length,2);
+assert.equal(merged.find(r=>r.name.endsWith('さん')&&r.listeners===50).detail,'c','同じ人数なら先に見えたほう');
+console.log('ranking one row per name ok');
 
 // 月ごとのファイルに分けて保存し、読み直すと元に戻る
 import { recentMonths, monthPart, mergeParts, monthsIn, monthFileName } from '../src/ranking.js';
