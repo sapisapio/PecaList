@@ -11,6 +11,7 @@ export function initRankingUI(ctx) {
   $('rank-date').value = rankDay(new Date());
   $('rank-month').value = rankDay(new Date()).slice(0, 7);
   function render() {
+    $('rank-enabled').checked = Boolean(ctx.settings.rankingEnabled);
     const monthly = $('rank-period').value === 'months';
     $('rank-date').hidden = monthly;
     $('rank-month').hidden = !monthly;
@@ -22,7 +23,7 @@ export function initRankingUI(ctx) {
     if (!rows.length) {
       const message = document.createElement('p');
       message.className = 'none';
-      message.textContent = 'この期間の記録はありません。PecaListで取得した配信から記録します。';
+      message.textContent = ctx.settings.rankingEnabled ? 'この期間の記録はありません。' : 'この期間の記録はありません（集計はオフです）。';
       box.append(message);
       return;
     }
@@ -44,6 +45,11 @@ export function initRankingUI(ctx) {
     });
     table.append(body); box.append(table);
   }
+  $('rank-enabled').addEventListener('change', () => {
+    ctx.settings.rankingEnabled = $('rank-enabled').checked;
+    ctx.saveSettings();
+    render();
+  });
   $('rank-period').addEventListener('change', render);
   $('rank-date').addEventListener('change', render);
   $('rank-month').addEventListener('change', render);
@@ -71,6 +77,7 @@ export function initRankingUI(ctx) {
       } catch (e) { ctx.toast('ランキングを読み込めませんでした：' + e); }
     },
     observe(channels) {
+      if (!ctx.settings.rankingEnabled) return; // 集計オフの間は記録しない
       // 書き直すのは今の月のファイルだけ
       const month = rankDay(new Date()).slice(0, 7);
       if (recordPeaks(data, channels)) saveStoreSoon(monthFileName(month), () => monthPart(data, month));

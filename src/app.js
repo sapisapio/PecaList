@@ -51,6 +51,7 @@ const defaults = {
   p2pArtworkEnabled: false,
   p2pHideListeners: false, // P2P の掲載でリスナー数・リレー数を非表示（-1）にする
   p2pBlocked: [],
+  rankingEnabled: false,  // ランキング：ONの間だけ集計
   activityEnabled: false, // 掲示板の勢い：ONの間だけ計測
   updateCheck: true,       // 新しい版が出ていないか、GitHub の配布ページを見る
   activityMinutes: 15,     // 勢いの取得間隔（15・30・60分）。利用者が増えると同じ掲示板に皆が取りに行くので、短くても15分
@@ -1826,6 +1827,7 @@ function openSettings() {
   $('opt-rec-wait').value = settings.recWaitMin;
   $('opt-rec-notify').checked = settings.recNotify;
   $('opt-activity').checked = settings.activityEnabled;
+  $('opt-ranking').checked = settings.rankingEnabled;
   $('opt-update').checked = settings.updateCheck !== false;
   $('settings').hidden = false;
 }
@@ -1895,6 +1897,8 @@ $('settings-save').addEventListener('click', () => {
   settings.recWaitMin = Math.min(360, Math.max(1, parseInt($('opt-rec-wait').value, 10) || 10));
   settings.recNotify = $('opt-rec-notify').checked;
   settings.activityEnabled = $('opt-activity').checked;
+  settings.rankingEnabled = $('opt-ranking').checked;
+  rankingUI.render();
   settings.updateCheck = $('opt-update').checked;
   activityUI.sync();
   saveSettings();

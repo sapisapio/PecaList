@@ -105,6 +105,7 @@
 
 <section class="ranking-view" id="ranking-view" hidden>
   <div class="ranking-bar">
+    <label class="chk"><input type="checkbox" id="rank-enabled"> ランキングを集計する</label>
     <label>集計 <select id="rank-period"><option value="days">日別</option><option value="months">月別</option></select></label>
     <input id="rank-date" type="date" aria-label="ランキングの日付">
     <input id="rank-month" type="month" aria-label="ランキングの月" hidden>
@@ -262,6 +263,10 @@
         <div class="field"><label>切れたとき待つ時間</label><input id="opt-rec-wait" type="number" min="1" max="360" style="flex:none;width:80px"> 分</div>
         <p class="hint">この時間内に戻れば、同じファイルに続けて録画します。</p>
         <div class="field"><label class="chk"><input type="checkbox" id="opt-rec-notify"> 録画を始めたとき・終わったときに通知する</label></div>
+      </section>
+      <section>
+        <h3>ランキング</h3>
+        <label class="chk"><input type="checkbox" id="opt-ranking"> ランキングを集計する（初期OFF）</label>
       </section>
       <section>
         <h3>掲示板の勢い</h3>
