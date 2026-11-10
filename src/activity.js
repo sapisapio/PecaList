@@ -1,6 +1,10 @@
 // PecaList — Copyright (C) 2026 sapisapio
 // SPDX-License-Identifier: GPL-3.0-or-later
-export const ACTIVITY_INTERVAL = 5 * 60 * 1000;
+// 選べる取得間隔（分）
+export const ACTIVITY_MINUTES = [15, 30, 60];
+export const DEFAULT_ACTIVITY_MINUTES = 15; // 5分・10分を選んでいた設定も、選べる中で一番短い15分として扱う
+export const ACTIVITY_INTERVAL = DEFAULT_ACTIVITY_MINUTES * 60 * 1000; // 初めの取得間隔
+export const activityInterval = (minutes) => (ACTIVITY_MINUTES.includes(minutes) ? minutes : DEFAULT_ACTIVITY_MINUTES) * 60 * 1000;
 
 // TOP・スレッド・スマートフォン用URLを掲示板単位にそろえる。
 export function boardFromUrl(value) {
@@ -66,12 +70,12 @@ export function activityTargets(channels) {
   return targets;
 }
 
-// 掲示板の運営に負担をかけないよう、1つずつ、1周（5分）の間に散らして取りに行く。
-// 掲示板が多くて5分に収まらないときは、1周の間隔を延ばす。
-export const MIN_GAP = 3000;
-export function roundPlan(n) {
-  const gap = n ? Math.max(MIN_GAP, Math.floor((ACTIVITY_INTERVAL * 0.9) / n)) : 0;
-  return { gap, round: Math.max(ACTIVITY_INTERVAL, gap * n) };
+// 掲示板の運営に負担をかけないよう、1つずつ、1周（取得間隔）の間に散らして取りに行く。
+// 掲示板が多くて間隔に収まらないときは、1周の間隔を延ばす。
+export const MIN_GAP = 13000; // 1つ取りに行ったら、次まで最低13秒あける（0.2.22 までは3秒）
+export function roundPlan(n, interval = ACTIVITY_INTERVAL) {
+  const gap = n ? Math.max(MIN_GAP, Math.floor((interval * 0.9) / n)) : 0;
+  return { gap, round: Math.max(interval, gap * n) };
 }
 
 // 「取りすぎ」（429）の返事なら、待つ時間（ミリ秒）を返す。相手が時間を言わなければ10分待つ
@@ -86,7 +90,8 @@ const siteOf = (key) => key.split("/")[0];
 // OFF にしたら、取りに行く途中の応答は捨て、残りも取りに行かない。
 export function createActivityMonitor(ctx) {
   let enabled = false, generation = 0, rows = new Map();
-  let queue = [], total = 0, plan = roundPlan(0), nextAt = 0, nextRequestAt = 0, inFlight = false;
+  let queue = [], total = 0, plan = roundPlan(0), nextAt = 0, nextRequestAt = 0, inFlight = false, roundStart = 0;
+  const interval = () => ctx.interval?.() ?? ACTIVITY_INTERVAL;
   const busyUntil = new Map(); // 掲示板サイト（jpnkn / shitaraba）→ この時刻まで取りに行かない
   function notify() { ctx.onChange(); }
   async function poll() {
@@ -99,7 +104,8 @@ export function createActivityMonitor(ctx) {
       rows = new Map([...rows].filter(([key]) => targets.has(key)));
       queue = [...targets.values()];
       total = queue.length;
-      plan = roundPlan(total);
+      plan = roundPlan(total, interval());
+      roundStart = now;
       nextAt = total ? now + plan.round : 0;
       nextRequestAt = now;
       notify();
@@ -147,6 +153,14 @@ export function createActivityMonitor(ctx) {
       queue = []; total = 0; nextAt = 0; nextRequestAt = 0; inFlight = false;
       notify();
       if (enabled) void poll();
+    },
+    // 取得間隔を変えたら、次の周をその間隔で数え直す（今の周の途中なら、残りは新しい間隔で散らす）
+    intervalChanged() {
+      if (!enabled || !total) return;
+      plan = roundPlan(total, interval());
+      nextAt = roundStart + plan.round;
+      if (queue.length) nextRequestAt = Math.min(nextRequestAt, ctx.now() + plan.gap);
+      notify();
     },
     tick() { return poll(); },
     snapshot() {

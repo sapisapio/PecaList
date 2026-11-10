@@ -1,12 +1,12 @@
 // PecaList — Copyright (C) 2026 sapisapio
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// ランキング・勢いの表の見出し。ペカレコと同じく、どの列も見出しの右端をドラッグして幅を変えられ、
+// ランキング・勢い・フィルタの表の見出し。ペカレコと同じく、どの列も見出しの右端をドラッグして幅を変えられ、
 // 1つの列を変えても、ほかの列の幅は変わらない（表全体の幅は列の合計。はみ出したら横に動かす）。
 // 幅は設定に残す。見出しの右端をダブルクリックすると、その列を初めの幅に戻す。
 const MIN_WIDTH = 30;
 
-// table：見出しを付ける表、kind：'ranking' か 'activity'、columns：[{ label, w }]
+// table：見出しを付ける表、kind：'ranking'・'activity'・'filter'、columns：[{ label, w, cls }]（cls は見出しに付ける class）
 export function buildRankHead(table, kind, columns, ctx) {
   const saved = () => ((ctx.settings.rankColWidths ||= {})[kind] ||= {});
   const widthOf = (c) => saved()[c.label] || c.w;
@@ -28,6 +28,7 @@ export function buildRankHead(table, kind, columns, ctx) {
   columns.forEach((c, i) => {
     const th = document.createElement('th');
     th.textContent = c.label;
+    if (c.cls) th.className = c.cls;
     const grip = document.createElement('span');
     grip.className = 'grip';
     grip.addEventListener('mousedown', (e) => {

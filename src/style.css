@@ -261,7 +261,6 @@ td.c-yp, td.c-type, td.c-tip { color: var(--text-3); font-size: calc(var(--font-
 .fv-bar { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: center; }
 .fv-sp { flex: 1; }
 .fv-list { flex: 1; overflow: auto; }
-.fv-table { width: 100%; }
 .fv-table th { cursor: default; }
 .fv-table td.kind { color: var(--text-2); }
 .fv-table tr.disabled td { color: var(--text-3); }
@@ -523,6 +522,8 @@ table.done { width: 100%; }
 /* 取得失敗は1つの入口にまとめ、ポップアップ内で確認・停止する */
 .yp-error-trigger { color: var(--error); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font: inherit; cursor: pointer; flex: none; }
 .yp-error-trigger[hidden], .yp-error-pop[hidden], .ranking-view[hidden] { display: none; }
+.update-notice { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 8px; font: inherit; cursor: pointer; flex: none; }
+.update-notice[hidden] { display: none; }
 .yp-error-pop { position: fixed; right: 12px; bottom: 25px; width: min(520px, calc(100vw - 24px)); max-height: min(560px, calc(100vh - 60px)); overflow: auto; z-index: 90; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; padding: 14px; box-sizing: border-box; box-shadow: 0 8px 28px #0005; }
 .yp-error-head, .yp-error-row { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
 .yp-error-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -534,7 +535,9 @@ table.done { width: 100%; }
 .ranking-view { flex: 1; min-height: 0; overflow: auto; padding: 18px; }
 .ranking-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .ranking-bar label { display: flex; align-items: center; gap: 8px; }
-.ranking-bar input, .ranking-bar select { background: var(--panel); color: var(--text); border: 1px solid var(--line-strong); border-radius: 5px; padding: 6px; font: inherit; }
+.activity-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.activity-bar > label:not(.chk) { display: flex; align-items: center; gap: 8px; }
+.ranking-bar input, .ranking-bar select, .activity-bar select { background: var(--panel); color: var(--text); border: 1px solid var(--line-strong); border-radius: 5px; padding: 6px; font: inherit; }
 .rank-table { font-size: 13px; }
 .rank-table th { text-align: left; color: var(--text-2); background: var(--panel-2); }
 .rank-table td, .rank-table th { padding: 10px 12px; border-bottom: 1px solid var(--line); }
@@ -614,7 +617,7 @@ body.narrow .favbar, body.narrow .detail, body.narrow #detail-toggle, body.narro
 body.narrow .tabs { padding: 0 4px; }
 body.narrow .tab { padding: 6px 7px 7px; font-size: 12px; }
 body.narrow .tab .n { font-size: 10px; padding: 0 5px; }
-body.narrow .tab[data-tab="ranking"], body.narrow .tab[data-tab="activity"], body.narrow .tab[data-tab="p2p"], body.narrow .tab[data-tab="filter"] { display: none; }
+body.narrow .tab[data-tab="ended"], body.narrow .tab[data-tab="playing"], body.narrow .tab[data-tab="ranking"], body.narrow .tab[data-tab="activity"], body.narrow .tab[data-tab="p2p"], body.narrow .tab[data-tab="filter"] { display: none; }
 body.narrow #table { display: none; }
 body.narrow .dlist { display: block; }
 body.narrow .status { padding: 4px 8px; font-size: 11px; }

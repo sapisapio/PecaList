@@ -1,14 +1,17 @@
 // PecaList — Copyright (C) 2026 sapisapio
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { createActivityMonitor } from './activity.js';
+import { createActivityMonitor, activityInterval, ACTIVITY_MINUTES } from './activity.js';
 import { buildRankHead } from './rank-cols.js';
 
 export function initActivityUI(ctx) {
   const $ = id => document.getElementById(id);
-  const monitor = createActivityMonitor({ channels: ctx.channels, fetch: ctx.fetch, now: () => Date.now(), onChange: render });
+  const minutes = () => activityInterval(ctx.settings.activityMinutes) / 60000;
+  const monitor = createActivityMonitor({ channels: ctx.channels, fetch: ctx.fetch, now: () => Date.now(), interval: () => activityInterval(ctx.settings.activityMinutes), onChange: render });
   function render() {
     const state = monitor.snapshot();
     $('activity-enabled').checked = state.enabled;
+    $('activity-minutes').value = String(minutes());
+    $('activity-hint').textContent = `掲示板全体で、${minutes() === 60 ? '1時間' : minutes() + '分間'}に増えたレス数です。`;
     const box = $('activity-results');
     box.replaceChildren();
     $('activity-status').textContent = !state.enabled ? 'OFF：掲示板への取得は行いません'
@@ -47,6 +50,16 @@ export function initActivityUI(ctx) {
     ctx.settings.activityEnabled = $('activity-enabled').checked;
     ctx.saveSettings();
     monitor.setEnabled(ctx.settings.activityEnabled);
+  });
+  // 取得の間隔（1時間・30分・10分・5分）
+  $('activity-minutes').replaceChildren(...[...ACTIVITY_MINUTES].reverse().map((m) => {
+    const o = document.createElement('option'); o.value = String(m); o.textContent = m === 60 ? '1時間' : `${m}分`; return o;
+  }));
+  $('activity-minutes').addEventListener('change', () => {
+    ctx.settings.activityMinutes = Number($('activity-minutes').value);
+    ctx.saveSettings();
+    monitor.intervalChanged();
+    render();
   });
   setInterval(() => { void monitor.tick(); }, 1000);
   return {

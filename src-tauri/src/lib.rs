@@ -58,6 +58,41 @@ async fn fetch_text(url: String, timeout_ms: u64) -> Result<String, String> {
   Ok(decode_text(&bytes))
 }
 
+/// ペカステで今再生しているチャンネル（このPCのプレイヤーがつながっているもの＝localDirects が1以上）。
+/// 「再生中」タブに使う。ペカステが動いていない・答えないときは空にする（エラーにしない）
+#[tauri::command]
+async fn peercast_playing(peercast: String) -> Vec<serde_json::Value> {
+  let Ok(base) = reqwest::Url::parse(&format!("http://{}/", peercast.trim())) else { return Vec::new() };
+  if !base.username().is_empty() || base.password().is_some() || base.path() != "/" || base.query().is_some() {
+    return Vec::new();
+  }
+  let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(3)).build() else { return Vec::new() };
+  let res = client.post(format!("{base}api/1"))
+    .header("X-Requested-With", "XMLHttpRequest")
+    .header("Content-Type", "application/json")
+    .body(r#"{"jsonrpc":"2.0","id":1,"method":"getChannels","params":{}}"#)
+    .send().await;
+  let Ok(res) = res else { return Vec::new() };
+  let Ok(bytes) = res.bytes().await else { return Vec::new() };
+  let Ok(body) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return Vec::new() };
+  let Some(list) = body.get("result").and_then(|r| r.as_array()) else { return Vec::new() };
+  let text = |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+  let num = |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_i64()).unwrap_or(0);
+  list.iter().take(256).filter_map(|c| {
+    let id = c.get("channelId")?.as_str()?;
+    if id.len() != 32 || !id.chars().all(|ch| ch.is_ascii_hexdigit()) { return None; }
+    let status = c.get("status")?;
+    if num(status, "localDirects") < 1 { return None; }
+    let info = c.get("info").cloned().unwrap_or_default();
+    Some(serde_json::json!({
+      "channelId": id.to_ascii_uppercase(),
+      "name": text(&info, "name"), "genre": text(&info, "genre"), "desc": text(&info, "desc"),
+      "comment": text(&info, "comment"), "url": text(&info, "url"), "contentType": text(&info, "contentType"),
+      "bitrate": num(&info, "bitrate"), "uptime": num(status, "uptime"),
+      "listeners": num(status, "totalDirects"), "relays": num(status, "totalRelays"),
+    }))
+  }).collect()
+}
 
 /// 掲示板のスレッド一覧だけを取得する。したらばはEUC-JP、jpnknはUTF-8。
 #[tauri::command]
@@ -479,6 +514,7 @@ pub fn run() {
       p2p::p2p_action,
       fetch_text,
       fetch_bbs_subject,
+      peercast_playing,
       launch,
       load_store,
       save_store,

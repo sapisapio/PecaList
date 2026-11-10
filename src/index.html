@@ -27,6 +27,8 @@
   <div class="tab on" data-tab="all">チャンネル <span class="n" id="n-all">0</span></div>
   <div class="tab" data-tab="fav">お気に入り <span class="n" id="n-fav">0</span></div>
   <div class="tab" data-tab="new">新着 <span class="n" id="n-new">0</span></div>
+  <div class="tab" data-tab="playing">再生中 <span class="n" id="n-playing">0</span></div>
+  <div class="tab" data-tab="ended">終了 <span class="n" id="n-ended">0</span></div>
   <div class="tab" data-tab="rec">録画 <span class="n" id="n-rec">0</span></div>
   <div class="tab" data-tab="ranking">ランキング</div>
   <div class="tab" data-tab="activity">勢い</div>
@@ -61,8 +63,6 @@
   </div>
   <div class="fv-list">
     <table class="fv-table">
-      <colgroup><col style="width:40px"><col style="width:200px"><col style="width:110px"><col><col style="width:150px"><col style="width:150px"><col style="width:60px"></colgroup>
-      <thead><tr><th>有効</th><th>フィルタ名</th><th>種類</th><th>基本検索</th><th>AND検索</th><th>NOT検索</th><th class="num">一致</th></tr></thead>
       <tbody id="fv-body"></tbody>
     </table>
     <div class="empty" id="fv-empty" hidden>フィルタはまだありません。「ペカレコの Filter.xml を読み込む」か「＋ 追加」から作れます。</div>
@@ -115,8 +115,9 @@
 </section>
 
 <section class="ranking-view" id="activity-view" hidden>
-    <p><label class="chk"><input type="checkbox" id="activity-enabled"> 掲示板の勢いを計測する（5分ごと）</label></p>
-    <p class="hint">掲示板全体で、5分間に増えたレス数です。</p>
+    <p class="activity-bar"><label class="chk"><input type="checkbox" id="activity-enabled"> 掲示板の勢いを計測する</label>
+      <label>取得の間隔 <select id="activity-minutes"></select></label></p>
+    <p class="hint" id="activity-hint"></p>
     <p class="hint" id="activity-status"></p>
     <div id="activity-results"></div>
 </section>
@@ -156,6 +157,7 @@
   <button class="st-toggle" id="detail-toggle" title="詳細パネルの表示/非表示">詳細 ▾</button>
   <div class="right">
     <button class="yp-error-trigger" id="yp-error-trigger" hidden aria-expanded="false" aria-controls="yp-error-pop">取得失敗</button>
+    <button class="update-notice" id="update-notice" hidden></button>
     <span id="st-time"></span>
     <span class="zoom"><button id="font-dec" title="文字を小さく">A−</button><button id="font-inc" title="文字を大きく">A＋</button></span>
   </div>
@@ -263,7 +265,7 @@
       </section>
       <section>
         <h3>掲示板の勢い</h3>
-        <label class="chk"><input type="checkbox" id="opt-activity"> 掲示板の勢いを計測する（5分ごと・初期OFF）</label>
+        <label class="chk"><input type="checkbox" id="opt-activity"> 掲示板の勢いを計測する（初期OFF）</label>
       </section>
       <section>
         <h3>操作</h3>
@@ -289,6 +291,10 @@
       <section>
         <h3>PeerCast</h3>
         <div class="field"><label>アドレス</label><input id="peercast" spellcheck="false" placeholder="localhost:7144"></div>
+      </section>
+      <section>
+        <h3>新しい版</h3>
+        <label class="chk"><input type="checkbox" id="opt-update"> 新しい版が出たら知らせる（GitHub の配布ページを見ます）</label>
       </section>
     </div>
     <div class="dlg-foot">

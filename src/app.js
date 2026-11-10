@@ -17,6 +17,8 @@ import { initNarrowUI } from './narrow-ui.js';
 import { canRecord, cleanDir } from './recording.js';
 import { initMigrateUI } from './migrate-ui.js';
 import { initYpErrorsUI } from './yp-errors-ui.js';
+import { initUpdateCheck } from './update-check.js';
+import { updateEnded, playingRows } from './ended.js';
 import { linkify } from './links.js';
 import { channelMedia, mediaButtons, artworkImage } from './channel-media.js';
 import { eventSchedule, eventPriority, japanDay } from './events.js';
@@ -47,7 +49,9 @@ const defaults = {
   p2pArtworkEnabled: false,
   p2pHideListeners: false, // P2P の掲載でリスナー数・リレー数を非表示（-1）にする
   p2pBlocked: [],
-  activityEnabled: false, // 掲示板の勢い：ONの間だけ5分ごとに計測
+  activityEnabled: false, // 掲示板の勢い：ONの間だけ計測
+  updateCheck: true,       // 新しい版が出ていないか、GitHub の配布ページを見る
+  activityMinutes: 15,     // 勢いの取得間隔（15・30・60分）。利用者が増えると同じ掲示板に皆が取りに行くので、短くても15分
   bbs: { path: '', urlRegex: '.*' },
   dblAction: 'play',
   detailOpen: true,
@@ -153,6 +157,7 @@ const COLUMNS = [
   { key: 'listeners', label: 'リスナー/リレー', w: 118, num: true, desc: true },
   { key: 'bitrate', label: 'kbps', w: 60, num: true, desc: true },
   { key: 'uptime', label: '時間', w: 62, num: true, desc: true },
+  { key: 'ended', label: '終了', w: 56, num: true, desc: true }, // 「終了」タブだけに出す
   { key: 'type', label: '形式', w: 52 },
   { key: 'filter', label: 'フィルタ', w: 100 },
   { key: 'yp', label: 'YP', w: 76 },
@@ -168,7 +173,7 @@ function orderedColumns() {
   for (const c of COLUMNS) if (!FIXED_COLS.includes(c.key) && !keys.includes(c.key)) keys.push(c.key);
   return [...FIXED_COLS, ...keys].map((k) => byKey.get(k));
 }
-const columnAvailable = (c) => settings.listLayout === 'two'
+const columnAvailable = (c) => c.key === 'ended' ? state.tab === 'ended' : settings.listLayout === 'two'
   ? !['genre', 'detail'].includes(c.key)
   : c.key !== 'genre' || settings.splitGenre;
 const visibleColumns = () => orderedColumns().filter((c) => columnAvailable(c) && !settings.hiddenCols.includes(c.key));
@@ -182,6 +187,8 @@ const state = {
   byYp: new Map(),          // YP名 → チャンネルの配列
   ypStatus: new Map(),      // YP名 → { ok, count, error }
   firstSeen: new Map(),     // key → 初めて見た時刻（起動直後の分は 0）
+  ended: new Map(),         // 終わった配信（key → 最後に見えたときの中身＋終わった時刻）。「終了」タブ
+  playing: [],              // ペカステで再生中のチャンネル。「再生中」タブ
   lastSeen: new Map(),      // key → 最後に見た時刻
   loadedOnce: false,
   loading: false,
@@ -250,7 +257,8 @@ async function refresh() {
   $('refresh').disabled = true;
   $('st-time').textContent = '更新中…';
   const observed = settings.p2pAutoActions ? state.p2pChannels.slice() : [];
-  const prev = new Map(allChannels().map((c) => [c.key, c.listeners]));
+  const before = allChannels();
+  const prev = new Map(before.map((c) => [c.key, c.listeners]));
   await Promise.all(state.yps.map(async (yp) => {
     try {
       const text = await fetchText(yp.url);
@@ -265,6 +273,7 @@ async function refresh() {
       state.ypStatus.set(yp.name, { ok: false, error: String(e) });
     }
   }));
+  updateEnded(state.ended, before, allChannels(), Date.now());
   rankingUI.observe(observed);
   activityUI.sync();
   markNew();
@@ -340,6 +349,7 @@ function sortValue(ch, key) {
     case 'detail': return detailText(ch);
     case 'yp': return ch.ypName;
     case 'filter': return evalOf(ch).first?.name ?? '';
+    case 'ended': return ch.ended || 0;
     default: return ch[key] ?? '';
   }
 }
@@ -358,7 +368,10 @@ function sorted(list) {
 function visibleChannels() {
   // NG に当たったチャンネルはどのタブにも出さない
   // YP のお知らせ行は一覧に出さず、「YPからのお知らせ」にまとめる
-  let list = allChannels().filter((c) => !c.info && !evalOf(c).ignore);
+  const base = state.tab === 'ended' ? [...state.ended.values()]
+    : state.tab === 'playing' ? playingChannels()
+    : allChannels();
+  let list = base.filter((c) => !c.info && !evalOf(c).ignore);
   if (state.tab === 'new') list = list.filter((c) => isNew(c));
   if (state.tab === 'fav') list = list.filter((c) => evalOf(c).favorite);
   return sorted(list.filter(matchesSearch));
@@ -439,6 +452,7 @@ function markEl(ch) {
   if (ch.info) return span('mk info');
   if (ch.event) return span('mk event');
   if (recUI.isRecording(ch)) return span('mk rec', '', '録画中');
+  if (ch.ended) return null; // 終わった配信には「新」「長」を付けない
   if (isNew(ch)) return span('mbadge new', '新', '新着');
   const h = longHours(ch);
   if (h) {
@@ -490,6 +504,7 @@ const CELLS = {
   filter: (ch, ev) => cell(ev.first?.name ?? '', 'c-filter'),
   yp: (ch) => { const td=cell(ch.sourceLabel || ch.ypName, 'c-yp'); if(ch.p2pConflict) td.title='同じチャンネルIDを複数の掲載者が共有しています。掲載者の本人性は確認されていません。'; return td; },
   tip: (ch) => cell(ch.tip, 'c-tip'),
+  ended: (ch) => cell(ch.ended ? new Date(ch.ended).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '', 'num'),
 };
 
 function twoLineCell(ch) {
@@ -557,6 +572,8 @@ function renderBody() {
     empty.textContent = !state.loadedOnce ? '読み込み中…'
       : state.search ? '検索に一致するチャンネルはありません'
       : state.tab === 'new' ? '新着のチャンネルはまだありません'
+      : state.tab === 'ended' ? 'この3時間に終わった配信はありません'
+      : state.tab === 'playing' ? 'ペカステで再生しているチャンネルはありません'
       : state.tab === 'fav' ? (state.filters.length ? 'お気に入りのチャンネルは配信していません' : 'お気に入りはまだありません。チャンネルを右クリック →「お気に入りに追加」か、フィルタタブでペカレコの Filter.xml を読み込めます')
       : 'チャンネルを取得できませんでした';
   } else {
@@ -569,6 +586,8 @@ function renderCounts() {
   $('n-all').textContent = all.length;
   $('n-new').textContent = all.filter(isNew).length;
   $('n-fav').textContent = all.filter((c) => evalOf(c).favorite).length;
+  $('n-ended').textContent = [...state.ended.values()].filter((c) => !evalOf(c).ignore).length;
+  $('n-playing').textContent = state.playing.length;
   $('n-filter').textContent = state.filters.length;
 
   ypErrorsUI.render();
@@ -753,8 +772,27 @@ function render() {
 }
 
 function findChannel(key) {
-  return key ? allChannels().find((c) => c.key === key) : null;
+  if (!key) return null;
+  return allChannels().find((c) => c.key === key) || state.ended.get(key) || playingChannels().find((c) => c.key === key) || null;
 }
+
+// 「再生中」タブの行：ペカステで再生中のチャンネルを、一覧の行（なければ終わった配信の行、それもなければペカステの情報）で出す
+function playingChannels() {
+  return playingRows(state.playing, allChannels(), [...state.ended.values()]);
+}
+
+// ペカステに、今再生しているチャンネルを10秒ごとに聞く（ペカステが動いていなければ空）
+async function pollPlaying() {
+  if (!tauri) return;
+  let list = [];
+  try { list = await tauri.core.invoke('peercast_playing', { peercast: settings.peercast }); } catch { list = []; }
+  if (JSON.stringify(list) === JSON.stringify(state.playing)) return;
+  state.playing = list;
+  renderCounts();
+  if (state.tab === 'playing') render();
+}
+setInterval(pollPlaying, 10_000);
+setTimeout(pollPlaying, 2_000);
 
 // ---- 列幅の変更 ----
 let resizing = false;
@@ -1411,7 +1449,7 @@ function showTab(name) {
   else if (isRank) rankingUI.render();
   else if (isFilter) filterUI.renderFilterView();
   else if (isRec) recUI.show();
-  else renderBody();
+  else { renderHead(); renderBody(); } // 「終了」タブだけ「終了」の列があるので、見出しも作り直す
 }
 $('tabs').addEventListener('click', (e) => {
   const tab = e.target.closest('.tab');
@@ -1743,6 +1781,7 @@ function openSettings() {
   $('opt-rec-wait').value = settings.recWaitMin;
   $('opt-rec-notify').checked = settings.recNotify;
   $('opt-activity').checked = settings.activityEnabled;
+  $('opt-update').checked = settings.updateCheck !== false;
   $('settings').hidden = false;
 }
 
@@ -1808,6 +1847,7 @@ $('settings-save').addEventListener('click', () => {
   settings.recWaitMin = Math.min(360, Math.max(1, parseInt($('opt-rec-wait').value, 10) || 10));
   settings.recNotify = $('opt-rec-notify').checked;
   settings.activityEnabled = $('opt-activity').checked;
+  settings.updateCheck = $('opt-update').checked;
   activityUI.sync();
   saveSettings();
   closeSettings();
@@ -1886,6 +1926,11 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---- 起動 ----
+// 新しい版のお知らせ（下の帯）
+initUpdateCheck({
+  settings, fetchText, openUrl,
+  current: async () => (tauri ? /PecaList (\S+)/.exec(await tauri.core.invoke('app_info'))?.[1] : '') || '',
+});
 const ypErrorsUI = initYpErrorsUI({
   getYps: () => state.yps,
   getStatus: (name) => state.ypStatus.get(name),
@@ -1916,11 +1961,11 @@ const p2pUI = initP2pUI({settings, saveSettings, toast, onArtworkChange:()=>rend
   if(settings.p2pAutoActions) { notifyNew(); rankingUI.observe(channels); recUI.onRefresh({p2pEvent:true}); }
 }});
 const rankingUI = initRankingUI({isShown: () => state.tab === 'ranking', toast, settings, saveSettings});
-const filterUI = initFilterUI({ getFilters: () => state.filters, setFilters, matchCount, toast });
+const filterUI = initFilterUI({ getFilters: () => state.filters, setFilters, matchCount, toast, settings, saveSettings });
 // ---- 細い表示と、右への張り付け ----
 // 張り付けているとき、または窓をこの幅より細くしたときは、名前だけの細い一覧にする
 const NARROW_WIDTH = 420;
-const NARROW_HIDDEN_TABS = ['ranking', 'activity', 'p2p', 'filter'];
+const NARROW_HIDDEN_TABS = ['ended', 'playing', 'ranking', 'activity', 'p2p', 'filter'];
 const isNarrow = () => document.body.classList.contains('narrow');
 function rowColors(ch) {
   const ev = evalOf(ch);

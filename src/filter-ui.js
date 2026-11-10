@@ -4,6 +4,7 @@
 
 // フィルタタブとフィルタ編集画面
 import { FIELD_LABELS, newFilter, parseFilterXml, compileFilter, autoRecords } from './filters.js';
+import { buildRankHead } from './rank-cols.js';
 
 const $ = (id) => document.getElementById(id);
 const clone = (o) => structuredClone(o);
@@ -37,8 +38,21 @@ function kindText(f) {
 export function initFilterUI(ctx) {
   let selected = -1;
 
+  // フィルタタブの表の見出し。ほかの表と同じく、列ごとに幅を変えられる（ほかの列は動かない）。
+  // 保存した幅を使うので、設定を読み込んだあと、初めて表を出すときに作る
+  let headBuilt = false;
+  function buildHead() {
+    if (headBuilt) return;
+    headBuilt = true;
+    buildRankHead(document.querySelector('.fv-table'), 'filter', [
+      { label: '有効', w: 44 }, { label: 'フィルタ名', w: 200 }, { label: '種類', w: 110 }, { label: '基本検索', w: 320 },
+      { label: 'AND検索', w: 150 }, { label: 'NOT検索', w: 150 }, { label: '一致', w: 60, cls: 'num' },
+    ], ctx);
+  }
+
   // ---- フィルタタブ ----
   function renderFilterView() {
+    buildHead();
     const filters = ctx.getFilters();
     if (selected >= filters.length) selected = filters.length - 1;
     const body = $('fv-body');

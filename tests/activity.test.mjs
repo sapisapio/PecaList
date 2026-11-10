@@ -27,7 +27,9 @@ const channels=[{name:'A',contactUrl:'https://bbs.jpnkn.com/siki/'},{name:'A',co
 assert.equal(activityTargets(channels).size,2);
 
 // 1周の計画：5分の間に散らす。多すぎるときは1周を延ばす（間隔は最低3秒）
-assert.deepEqual(roundPlan(36),{gap:7500,round:ACTIVITY_INTERVAL});
+assert.deepEqual(roundPlan(36),{gap:22500,round:ACTIVITY_INTERVAL},'15分なら36件を22.5秒おき');
+assert.deepEqual(roundPlan(100),{gap:MIN_GAP,round:100*MIN_GAP},'多いときも1件ごとに最低13秒あける');
+assert.equal(MIN_GAP,13000);
 assert.deepEqual(roundPlan(200),{gap:MIN_GAP,round:200*MIN_GAP});
 assert.deepEqual(roundPlan(0),{gap:0,round:ACTIVITY_INTERVAL});
 // 「取りすぎ」（429）の返事
@@ -45,7 +47,7 @@ await monitor.tick();await flush();assert.equal(calls,1,'次の掲示板は間�
 at+=gap;await monitor.tick();await flush();assert.equal(calls,2,'掲示板単位で一回だけ取得');
 assert.ok(monitor.snapshot().rows.every(r=>r.count===null));
 assert.equal(monitor.snapshot().running,false);
-at+=ACTIVITY_INTERVAL-gap-1;await monitor.tick();await flush();assert.equal(calls,2,'5分未満では次の周に入らない');
+at+=ACTIVITY_INTERVAL-gap-1;await monitor.tick();await flush();assert.equal(calls,2,'取得間隔未満では次の周に入らない');
 at++;await monitor.tick();await flush();at+=gap;await monitor.tick();await flush();
 assert.equal(calls,4);assert.ok(monitor.snapshot().rows.every(r=>r.count===5));
 fail=true;at+=ACTIVITY_INTERVAL;await monitor.tick();await flush();at+=gap;await monitor.tick();await flush();
@@ -57,7 +59,7 @@ monitor.setEnabled(false);at+=ACTIVITY_INTERVAL;const oldCalls=calls;await monit
 // 429：失敗にせず前回の値を残し、そのサイトには待つ時間が過ぎるまで取りに行かない（したらばは続ける）
 const three=[{name:'J1',contactUrl:'https://bbs.jpnkn.com/a/'},{name:'J2',contactUrl:'https://bbs.jpnkn.com/b/'},{name:'S',contactUrl:'https://jbbs.shitaraba.net/game/1/'}];
 const asked=[];let busy=false;
-const m2=createActivityMonitor({now:()=>at,channels:()=>three,fetch:async(url)=>{asked.push(url);if(busy&&url.includes('jpnkn'))throw Error('混雑(429) retry=600');return '100.dat<>スレ (1)';},onChange:()=>{}});
+const m2=createActivityMonitor({now:()=>at,channels:()=>three,fetch:async(url)=>{asked.push(url);if(busy&&url.includes('jpnkn'))throw Error('混雑(429) retry=2400');return '100.dat<>スレ (1)';},onChange:()=>{}});
 const g3=roundPlan(3).gap;
 const runRound=async()=>{await m2.tick();await flush();for(let i=0;i<3;i++){at+=g3;await m2.tick();await flush();}};
 m2.setEnabled(true);await flush();for(let i=0;i<3;i++){at+=g3;await m2.tick();await flush();}
@@ -68,7 +70,7 @@ const rows=m2.snapshot().rows;
 assert.ok(rows.filter(r=>r.name.startsWith('jpnkn')).every(r=>r.busy&&!r.error),'429は取得失敗にしない');
 assert.ok(rows.filter(r=>r.name.startsWith('jpnkn')).every(r=>r.baseline),'前回の基準を残す');
 busy=false;at+=ACTIVITY_INTERVAL;asked.length=0;await runRound();
-assert.deepEqual(asked.map(u=>u.includes('jpnkn')?'j':'s'),['s'],'待つ時間（10分）が過ぎるまでは取りに行かない');
+assert.deepEqual(asked.map(u=>u.includes('jpnkn')?'j':'s'),['s'],'待つ時間（40分）が過ぎるまでは取りに行かない');
 at+=ACTIVITY_INTERVAL;asked.length=0;await runRound();
 assert.equal(asked.length,3,'待つ時間が過ぎたら取りに行く');
 
@@ -78,3 +80,23 @@ const pending=createActivityMonitor({now:()=>at,channels:()=>['a','b','c'].map(n
 pending.setEnabled(true);assert.equal(pendingCalls,1,'同時に取りに行くのは1つ');pending.setEnabled(false);resolveFetch('100.dat<>スレ(9)');await flush();
 at+=ACTIVITY_INTERVAL;await pending.tick();assert.equal(pendingCalls,1,'OFF後は残りを取得しない');assert.equal(pending.snapshot().rows.length,0,'OFF後の応答は破棄');
 console.log('activity tests ok');
+
+// 取得間隔を選べる（1時間・30分・10分・5分）
+import { activityInterval, ACTIVITY_MINUTES } from '../src/activity.js';
+assert.deepEqual(ACTIVITY_MINUTES,[15,30,60]);
+assert.equal(activityInterval(60),3600000);
+assert.equal(activityInterval(undefined),900000,'選んでいなければ15分');
+assert.equal(activityInterval(5),900000,'前の版の5分・10分は15分として扱う');
+assert.equal(activityInterval(10),900000);
+assert.deepEqual(roundPlan(36,activityInterval(60)),{gap:90000,round:3600000},'1時間なら36件を1時間に散らす');
+{
+  let t=0,n=0,mins=60;const ch=[{name:'a',contactUrl:'https://bbs.jpnkn.com/a/'}];
+  const m=createActivityMonitor({now:()=>t,channels:()=>ch,interval:()=>activityInterval(mins),fetch:async()=>{n++;return '100.dat<>スレ (1)';},onChange:()=>{}});
+  m.setEnabled(true);await m.tick();await new Promise(r=>setTimeout(r,0));
+  assert.equal(n,1);
+  t+=15*60000;await m.tick();assert.equal(n,1,'1時間のときは15分では取りに行かない');
+  mins=15;m.intervalChanged();await m.tick();await new Promise(r=>setTimeout(r,0));
+  assert.equal(n,2,'15分に変えたら、すでに15分たっていればすぐ次の周');
+  assert.equal(m.snapshot().rows[0].count,0,'15分の間の差を数える');
+}
+console.log('activity interval tests ok');
