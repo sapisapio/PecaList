@@ -148,6 +148,29 @@ function saveSettings() {
   saveStoreSoon('settings', () => settings);
 }
 
+// ---- 統計URL（YP4G の getgmt.php） ----
+// SP のように統計ページのある YP だけで出す。YP ごとに1回だけ、統計ページが開けるか確かめて覚える
+const statsBase = new Map(); // YP の index.txt のURL → 統計ページの元のURL（なければ null）
+const ypBase = (url) => url.replace(/index\.txt(\?.*)?$/i, '');
+async function probeStats() {
+  for (const yp of state.yps) {
+    if (yp.event || statsBase.has(yp.url)) continue;
+    statsBase.set(yp.url, null);
+    try {
+      const text = await fetchText(ypBase(yp.url) + 'getgmt.php?cn=');
+      if (/Statistics/i.test(text)) statsBase.set(yp.url, ypBase(yp.url));
+    } catch { /* 統計ページのない YP */ }
+  }
+}
+function statsUrl(ch) {
+  if (ch.p2pOnly || ch.info || ch.event) return '';
+  for (const name of [ch.ypName, ...(ch.alsoYps || [])]) {
+    const base = statsBase.get(state.yps.find((y) => y.name === name)?.url);
+    if (base) return base + 'getgmt.php?cn=' + encodeURIComponent(ch.name);
+  }
+  return '';
+}
+
 // ---- 列の定義 ----
 const COLUMNS = [
   { key: 'mark', label: '', w: 26, sortable: false },
@@ -274,6 +297,7 @@ async function refresh() {
     }
   }));
   updateEnded(state.ended, before, allChannels(), Date.now());
+  void probeStats();
   rankingUI.observe(observed);
   activityUI.sync();
   markNew();
@@ -982,17 +1006,18 @@ function startColumnDrag(e, c, th) {
 function openMenu(x, y, ch) {
   const menu = $('menu');
   menu.replaceChildren();
-  const player = findPlayer(settings.players, ch);
-  const playLabel = ch.info ? '再生'
-    : player ? `再生（${fileName(player.path)}）`
-    : `再生（${ch.type || '不明な形式'} のプレイヤーが未設定）`;
-  menu.appendChild(menuItem(playLabel, () => play(ch), !ch.info && !!player));
-  menu.appendChild(menuItem(settings.bbs.path ? '掲示板を開く' : '掲示板をブラウザで開く', () => openBbs(ch), !!ch.contactUrl));
-  menu.appendChild(menuItem('コンタクトURLをブラウザで開く', () => openUrl(ch.contactUrl), !!ch.contactUrl));
+  // プレイヤーが未設定なら、押したときに案内を出す（play の中）
+  menu.appendChild(menuItem('再生する', () => play(ch), !ch.info));
+  // BBSブラウザを登録していなければ押せない（ブラウザで開くのは「コンタクトURLを開く」）
+  menu.appendChild(menuItem('BBSブラウザで掲示板を開く', () => openBbs(ch), !!settings.bbs.path && !!ch.contactUrl));
+  menu.appendChild(menuItem('コンタクトURLを開く', () => openUrl(ch.contactUrl), !!ch.contactUrl));
+  // 統計URL：SP など統計ページのある YP の配信だけ（P2P だけの配信には出さない）
+  const stats = statsUrl(ch);
+  if (stats) menu.appendChild(menuItem('統計URLを開く', () => openUrl(stats)));
+  if (recUI.isRecording(ch)) menu.appendChild(menuItem('録画を止める', () => recUI.stopChannel(ch)));
+  else menu.appendChild(menuItem(canRecord(ch) || ch.info ? '録画をする' : `録画をする（${ch.type || '不明な形式'} は未対応）`, () => recUI.start(ch), canRecord(ch)));
   const p2pPublishers=ch.p2pOnly?(ch.p2pOwn?[]:[ch.publisher]):(ch.p2pSources||[]).filter(k=>!(ch.p2pOwnKeys||[]).includes(k));
   for(const [index,key] of p2pPublishers.entries())menu.appendChild(menuItem('このP2P掲載者をブロック'+(p2pPublishers.length>1?`（${index+1}）`:''),()=>p2pUI.block(key,ch.name)));
-  if (recUI.isRecording(ch)) menu.appendChild(menuItem('録画を止める', () => recUI.stopChannel(ch)));
-  else menu.appendChild(menuItem(canRecord(ch) || ch.info ? '録画する' : `録画する（${ch.type || '不明な形式'} は未対応）`, () => recUI.start(ch), canRecord(ch)));
   const tools = settings.tools.filter((t) => t.enabled && (t.path || t.browser));
   if (tools.length) {
     menu.appendChild(document.createElement('hr'));
