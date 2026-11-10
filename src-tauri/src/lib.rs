@@ -468,6 +468,101 @@ fn launch(path: String, args: Vec<String>) -> Result<(), String> {
   cmd.spawn().map(|_| ()).map_err(|e| format!("起動できませんでした: {e}"))
 }
 
+// ---- ペカステの起動 ----
+
+/// ペカステのアドレス（「localhost:7144」など）につながるか
+fn peercast_answers(addr: &str) -> bool {
+  use std::net::ToSocketAddrs;
+  let host = addr.trim().trim_start_matches("http://").split('/').next().unwrap_or("");
+  let host = if host.contains(':') { host.to_string() } else { format!("{host}:7144") };
+  host.to_socket_addrs().map(|list| list.into_iter().any(|a| std::net::TcpStream::connect_timeout(&a, Duration::from_millis(800)).is_ok())).unwrap_or(false)
+}
+
+/// 同じ名前の exe が動いているか（ペカステが起動の途中で、まだ答えないときのため）
+fn process_running(exe: &std::path::Path) -> bool {
+  use std::os::windows::process::CommandExt;
+  const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+  let Some(name) = exe.file_name().and_then(|n| n.to_str()) else { return false };
+  std::process::Command::new("tasklist")
+    .args(["/FI", &format!("IMAGENAME eq {name}"), "/NH", "/FO", "CSV"])
+    .creation_flags(CREATE_NO_WINDOW)
+    .output()
+    .map(|o| String::from_utf8_lossy(&o.stdout).to_ascii_lowercase().contains(&format!("\"{}\"", name.to_ascii_lowercase())))
+    .unwrap_or(false)
+}
+
+/// ペカステが動いていなければ起動する（ペカレコと同じく、PecaList の起動時に呼ぶ）。
+/// 答え：running もう動いている / started 起動した
+#[tauri::command]
+async fn peercast_start(path: String, peercast: String) -> Result<String, String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let exe = std::path::Path::new(path.trim());
+    if peercast_answers(&peercast) || process_running(exe) {
+      return Ok("running".to_string());
+    }
+    launch(path.trim().to_string(), Vec::new()).map(|_| "started".to_string())
+  })
+  .await
+  .map_err(|e| e.to_string())?
+}
+
+// ---- タスクトレイ ----
+
+/// 閉じるボタンで終わらずにタスクトレイにしまう（画面の設定から変える）
+static CLOSE_TO_TRAY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+#[tauri::command]
+fn set_close_to_tray(on: bool) {
+  CLOSE_TO_TRAY.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// しまった窓を出して、手前にする
+fn show_main(app: &tauri::AppHandle) {
+  use tauri::Manager;
+  if let Some(w) = app.get_webview_window("main") {
+    let _ = w.show();
+    let _ = w.unminimize();
+    let _ = w.set_focus();
+  }
+}
+
+/// トレイにしまっているときだけ窓を出す（通知のカードを押したとき。出ているときは手前にしない）
+#[tauri::command]
+fn show_if_hidden(app: tauri::AppHandle) {
+  use tauri::Manager;
+  if app.get_webview_window("main").is_some_and(|w| !w.is_visible().unwrap_or(true)) {
+    show_main(&app);
+  }
+}
+
+/// タスクトレイのアイコン。左クリックで窓を出す、右クリックで「開く」「終了」
+fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+  use tauri::menu::{Menu, MenuItem};
+  use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+  let open = MenuItem::with_id(app, "open", "PecaList を開く", true, None::<&str>)?;
+  let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
+  let menu = Menu::with_items(app, &[&open, &quit])?;
+  let mut tray = TrayIconBuilder::with_id("main")
+    .tooltip("PecaList")
+    .menu(&menu)
+    .show_menu_on_left_click(false)
+    .on_menu_event(|app, ev| match ev.id().as_ref() {
+      "open" => show_main(app),
+      "quit" => app.exit(0),
+      _ => {}
+    })
+    .on_tray_icon_event(|tray, ev| {
+      if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = ev {
+        show_main(tray.app_handle());
+      }
+    });
+  if let Some(icon) = app.default_window_icon() {
+    tray = tray.icon(icon.clone());
+  }
+  tray.build(app)?;
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // 設定の置き場所は、窓を作る前に決める（画面の一時データの場所も、ここで exe の横に向ける）
@@ -499,6 +594,7 @@ pub fn run() {
       };
       app.manage(data_dir::DataDir(data));
       create_notify_window(app.handle())?;
+      create_tray(app.handle())?;
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -516,6 +612,9 @@ pub fn run() {
       fetch_bbs_subject,
       peercast_playing,
       launch,
+      peercast_start,
+      set_close_to_tray,
+      show_if_hidden,
       load_store,
       save_store,
       delete_store,
@@ -540,6 +639,13 @@ pub fn run() {
       recorder::rec_default_dir,
     ])
     .on_window_event(|win, ev| {
+      // 閉じるボタンでは終わらず、タスクトレイにしまう（終わるのはトレイのアイコンの右クリックから）
+      if let tauri::WindowEvent::CloseRequested { api, .. } = ev {
+        if win.label() == "main" && CLOSE_TO_TRAY.load(std::sync::atomic::Ordering::SeqCst) {
+          api.prevent_close();
+          let _ = win.hide();
+        }
+      }
       // メインの窓を閉じたらアプリを終わる（通知の窓だけが残らないように）
       if win.label() == "main" && matches!(ev, tauri::WindowEvent::Destroyed) {
         use tauri::Manager;

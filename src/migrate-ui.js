@@ -44,6 +44,7 @@ export function initMigrateUI(ctx) {
     }
     if (c.bbs) out.push(li('掲示板ブラウザ', c.bbs.path));
     if (c.peercast) out.push(li('PeerCast の場所', c.peercast));
+    if (c.peercastPath) out.push(li('ペカステの実行ファイル', c.peercastPath, '起動時に動いていなければ起動します'));
     if (c.autoOn !== undefined) out.push(li('自動更新', c.autoOn ? `${Math.round(c.autoSec / 60)}分ごと（起動したらすぐ始める）` : `オフ（${Math.round(c.autoSec / 60)}分ごと）`));
     if (c.recDir) out.push(li('録画の保存先', c.recDir, c.recSubFolder ? 'チャンネルごとにフォルダを作る' : ''));
     if (c.dblAction) out.push(li('クリック', `ダブルクリック：${ACTION_LABEL[c.dblAction]}、中クリック：${ACTION_LABEL[c.midAction]}`));
@@ -108,7 +109,7 @@ export function initMigrateUI(ctx) {
       });
       s.yps = yps;
     }
-    for (const k of ['players', 'bbs', 'peercast', 'timeoutMs', 'autoOn', 'autoSec', 'recDir', 'recSubFolder',
+    for (const k of ['players', 'bbs', 'peercast', 'peercastPath', 'timeoutMs', 'autoOn', 'autoSec', 'recDir', 'recSubFolder',
       'notifyFav', 'notifyAllNew', 'soundOn', 'soundPath', 'dblAction', 'midAction', 'tools', 'blocks']) {
       if (conf[k] !== undefined) s[k] = conf[k];
     }

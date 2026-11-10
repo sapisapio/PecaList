@@ -52,6 +52,9 @@ export function parsePecarecXml(text, dir) {
     if (attr(net, 'host')) out.peercast = attr(net, 'host').trim();
     out.timeoutMs = Math.min(60000, Math.max(1000, int(net, 'timeout', 10000)));
   }
+  // PeerCast の実行ファイル（<peercast><base path="…PeerCastStation.exe"/>。展開したペカレコ v0.91 で確かめた）
+  const pc = q('peercast > base');
+  if (pc && attr(pc, 'path')?.trim()) out.peercastPath = resolvePath(attr(pc, 'path'), dir);
 
   // プレイヤーは今使っている実行ファイルの場所と引数をそのまま引き継ぐ
   const players = [];

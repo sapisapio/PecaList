@@ -41,6 +41,8 @@ const defaults = {
   autoOn: true,
   autoSec: 60,
   peercast: 'localhost:7144',
+  peercastPath: '',  // ペカステの実行ファイル。起動時に動いていなければ起動する（ペカレコと同じ）
+  closeToTray: true, // 閉じるボタンでタスクトレイにしまう（終了はトレイのアイコンの右クリック）
   timeoutMs: 10000,
   // プレイヤー：{ enabled, path, args, type }
   players: [],
@@ -1234,7 +1236,7 @@ if (tauri) {
     if (action === 'dismiss') removePopup(key);
     else if (action === 'play' && ch) { play(ch); removePopup(key); }
     else if (action === 'bbs' && ch) openBbs(ch);
-    else if (action === 'select' && ch) select(key);
+    else if (action === 'select' && ch) { select(key); tauri.core.invoke('show_if_hidden').catch(() => {}); }
   });
 }
 
@@ -1783,6 +1785,8 @@ function openSettings() {
   $('bbs-regex').value = settings.bbs.urlRegex;
   $('dbl-action').value = settings.dblAction;
   $('peercast').value = settings.peercast;
+  $('peercast-path').value = settings.peercastPath;
+  $('opt-close-tray').checked = settings.closeToTray;
   $('opt-split-genre').checked = settings.splitGenre;
   $('opt-open-free').checked = settings.showOpenFree;
   $('opt-fav-light').value = favColor(settings.favColorLight, 'light');
@@ -1848,6 +1852,9 @@ $('settings-save').addEventListener('click', () => {
   settings.bbs = { path: $('bbs-path').value.trim(), urlRegex: $('bbs-regex').value.trim() || '.*' };
   settings.dblAction = $('dbl-action').value;
   settings.peercast = $('peercast').value.trim() || 'localhost:7144';
+  settings.peercastPath = $('peercast-path').value.trim();
+  settings.closeToTray = $('opt-close-tray').checked;
+  applyCloseToTray();
   settings.splitGenre = $('opt-split-genre').checked;
   settings.showOpenFree = $('opt-open-free').checked;
   Object.assign(settings, draftFav());
@@ -1922,6 +1929,24 @@ $('bbs-browse').addEventListener('click', async () => {
   const f = await pickExe();
   if (f) $('bbs-path').value = f;
 });
+$('peercast-browse').addEventListener('click', async () => {
+  const f = await pickExe();
+  if (f) $('peercast-path').value = f;
+});
+
+function applyCloseToTray() {
+  if (tauri) tauri.core.invoke('set_close_to_tray', { on: Boolean(settings.closeToTray) }).catch(() => {});
+}
+
+// ペカステが動いていなければ起動する（ペカレコと同じく、PecaList の起動時だけ）
+async function startPeercast() {
+  if (!tauri || !settings.peercastPath) return;
+  try {
+    if (await tauri.core.invoke('peercast_start', { path: settings.peercastPath, peercast: settings.peercast }) === 'started') toast('ペカステを起動しました');
+  } catch (e) {
+    toast('ペカステを起動できませんでした：' + e);
+  }
+}
 $('rec-dir-browse').addEventListener('click', async () => {
   const d = tauri
     ? await tauri.core.invoke('plugin:dialog|open', { options: { multiple: false, directory: true, defaultPath: $('rec-dir').value.trim() || undefined } })
@@ -2103,6 +2128,8 @@ setStoreErrorHandler((e) => toast('保存できませんでした：' + e));
   } catch (e) {
     toast('設定の読み込みに失敗しました：' + e);
   }
+  applyCloseToTray();
+  startPeercast();
   renderDockButtons();
   if (settings.docked) await dock(true); // 前回、張り付けたまま終わった
   applyNarrow();
