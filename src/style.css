@@ -67,7 +67,7 @@ body {
   height: 28px; padding: 0 12px; border-radius: 6px;
   border: 1px solid var(--line-strong); background: var(--panel);
   color: var(--text); display: inline-flex; align-items: center; gap: 6px;
-  font: inherit; font-size: 13px; cursor: pointer;
+  font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
 }
 .btn:hover { background: var(--row-hover); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -379,7 +379,11 @@ a.lnk:hover { text-decoration: underline; }
 .st-toggle:hover { background: var(--row-hover); }
 
 /* 細いウィンドウ */
-.toolbar { min-width: 0; }
+.toolbar { min-width: 0; overflow: hidden; }
+.toolbar > .btn, .auto { flex: none; white-space: nowrap; }
+/* 入りきらないときは、ボタンの文字を隠して記号だけにする（app.js の fitToolbar。内容はホバーで出る） */
+.toolbar.compact .lbl, .toolbar.compact .auto-lbl { display: none; }
+.toolbar.compact > .btn { min-width: 30px; padding: 0 8px; justify-content: center; }
 .search { width: auto; flex: 0 1 260px; min-width: 110px; }
 .tabs { overflow-x: auto; scrollbar-width: none; }
 .tab { flex: none; }
@@ -396,8 +400,6 @@ a.lnk:hover { text-decoration: underline; }
 }
 @media (max-width: 460px) {
   .auto { display: none; }
-  #open-settings { font-size: 0; width: 32px; padding: 0; justify-content: center; }
-  #open-settings::before { content: "⚙"; font-size: 14px; }
   #st-time { display: none; }
 }
 .notice-btn { flex: none; white-space: nowrap; }
@@ -605,13 +607,10 @@ a.service-link.niconico svg { color: var(--text); }
 #topmost-toggle[hidden] { display: none; }
 body.narrow .toolbar { gap: 6px; padding: 8px 8px 6px; }
 body.narrow .search, body.narrow #layout-toggle, body.narrow #open-cols, body.narrow #theme-toggle,
-body.narrow .auto .auto-lbl, body.narrow .dock-lbl { display: none; }
+body.narrow .auto .auto-lbl, body.narrow .toolbar .lbl { display: none; }
 body.narrow .auto { display: flex; flex: 1; min-width: 0; }
 body.narrow .toolbar .btn { width: 30px; height: 28px; padding: 0; justify-content: center; flex: none; }
-body.narrow #refresh, body.narrow #open-settings { font-size: 0; }
-body.narrow #refresh::before { content: "⟳"; font-size: 15px; }
-body.narrow #open-settings::before { content: "⚙"; font-size: 14px; }
-body.narrow #dock-toggle, body.narrow #topmost-toggle { font-size: 13px; }
+body.narrow #refresh .ic { font-size: 15px; }
 .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 body.narrow .favbar, body.narrow .detail, body.narrow #detail-toggle, body.narrow .zoom, body.narrow .notice-btn { display: none !important; }
 body.narrow .tabs { padding: 0 4px; }

@@ -324,7 +324,7 @@ async function refresh() {
 function syncRefreshButton() {
   const wait = manualWait();
   $('refresh').disabled = state.loading || wait > 0;
-  $('refresh').title = state.loading ? '更新中' : wait > 0 ? `あと${Math.ceil(wait / 1000)}秒で更新できます` : '';
+  $('refresh').title = state.loading ? '更新中' : wait > 0 ? `あと${Math.ceil(wait / 1000)}秒で更新できます` : '更新';
 }
 
 function allChannels() {
@@ -405,7 +405,8 @@ function visibleChannels() {
 
 function renderHead() {
   $('table').classList.toggle('two-line', settings.listLayout === 'two');
-  $('layout-toggle').textContent = settings.listLayout === 'two' ? '▤ 2行' : '☰ 1行';
+  const two = settings.listLayout === 'two';
+  setBtn('layout-toggle', two ? '▤' : '☰', two ? '2行' : '1行', `表示：${two ? '2行' : '1行'}（クリックで${two ? '1行' : '2行'}）`);
   $('layout-toggle').setAttribute('aria-pressed', String(settings.listLayout === 'two'));
   const cols = $('cols'), head = $('head');
   cols.replaceChildren();
@@ -1427,6 +1428,22 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
 }
 
+// ---- 上のボタン：入りきらないときは文字を隠して記号だけにする（内容はホバーで出る） ----
+function setBtn(id, icon, label, title) {
+  const b = $(id);
+  b.querySelector('.ic').textContent = icon;
+  b.querySelector('.lbl').textContent = label;
+  b.title = title;
+  b.setAttribute('aria-label', title);
+  fitToolbar();
+}
+function fitToolbar() {
+  const bar = document.querySelector('.toolbar');
+  bar.classList.remove('compact');
+  if (bar.scrollWidth > bar.clientWidth + 1) bar.classList.add('compact');
+}
+new ResizeObserver(fitToolbar).observe(document.querySelector('.toolbar'));
+
 // ---- テーマ ----
 const THEMES = ['system', 'light', 'dark'];
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
@@ -1434,11 +1451,10 @@ function applyTheme() {
   if (!THEMES.includes(settings.theme)) settings.theme = 'system';
   if (settings.theme === 'system') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = settings.theme;
-  const labels = {system:'◐ 自動',light:'☀ ライト',dark:'☾ ダーク'};
+  const icons = { system: '◐', light: '☀', dark: '☾' };
+  const labels = { system: '自動', light: 'ライト', dark: 'ダーク' };
   const next = THEMES[(THEMES.indexOf(settings.theme) + 1) % THEMES.length];
-  $('theme-toggle').textContent = labels[settings.theme];
-  $('theme-toggle').title = `テーマ：${labels[settings.theme]}（クリックで${labels[next]}）`;
-  $('theme-toggle').setAttribute('aria-label', $('theme-toggle').title);
+  setBtn('theme-toggle', icons[settings.theme], labels[settings.theme], `テーマ：${labels[settings.theme]}（クリックで${labels[next]}）`);
   const resolved = settings.theme === 'system' ? (systemTheme.matches ? 'dark' : 'light') : settings.theme;
   if (tauri) tauri.core.invoke('set_titlebar_theme', { theme: resolved }).catch((e) => console.warn(e));
 }

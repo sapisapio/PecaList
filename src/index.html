@@ -7,15 +7,15 @@
 </head>
 <body>
 <div class="toolbar">
-  <button class="btn primary" id="refresh">⟳ 更新</button>
+  <button class="btn primary" id="refresh" title="更新"><span class="ic">⟳</span><span class="lbl">更新</span></button>
   <div class="auto" id="auto" title="クリックで自動更新のオン/オフ"><span class="auto-lbl">自動更新</span><span class="bar"><i id="autobar"></i></span><span id="autotext"></span></div>
   <label class="search">⌕ <input id="search" type="search" placeholder="チャンネル名・ジャンル・詳細を検索" spellcheck="false"></label>
-  <button class="btn" id="layout-toggle" title="1行／2行表示の切り替え" aria-pressed="false">☰ 1行</button>
+  <button class="btn" id="layout-toggle" aria-pressed="false"><span class="ic"></span><span class="lbl"></span></button>
   <button class="btn" id="open-cols" title="表示する列">列</button>
-  <button class="btn" id="theme-toggle" title="テーマの切り替え">◐ 自動</button>
-  <button class="btn" id="dock-toggle" title="画面の右端に細く張り付ける">📌 <span class="dock-lbl">右に張り付ける</span></button>
+  <button class="btn" id="theme-toggle"><span class="ic"></span><span class="lbl"></span></button>
+  <button class="btn" id="dock-toggle" title="画面の右端に細く張り付ける"><span class="ic">📌</span><span class="lbl">右に張り付ける</span></button>
   <button class="btn" id="topmost-toggle" title="常に手前に表示" hidden>⧉</button>
-  <button class="btn" id="open-settings">⚙ 設定</button>
+  <button class="btn" id="open-settings" title="設定"><span class="ic">⚙</span><span class="lbl">設定</span></button>
 </div>
 
 <div class="favbar" id="favbar" hidden>
