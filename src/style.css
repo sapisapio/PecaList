@@ -179,6 +179,7 @@ td.c-yp, td.c-type, td.c-tip { color: var(--text-3); font-size: calc(var(--font-
 }
 .status .url { color: var(--accent); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .status .right { margin-left: auto; display: flex; gap: 16px; align-items: center; flex: none; }
+.app-ver { color: var(--text-3); white-space: nowrap; }
 .status .yperr { color: var(--error); }
 .zoom { display: flex; gap: 2px; }
 .zoom button {

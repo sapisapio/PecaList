@@ -93,6 +93,8 @@ const defaults = {
   dockLayer: 'bottom',   // 張り付けたときの重なり方：top 常に手前 / normal ふつう / bottom 最下面（初めは最下面）
   dockLayerSet: false,   // 重なり方を自分で選んだか（選んでいなければ、初めの値に合わせる）
   dockRestore: null,     // 張り付ける前の窓の位置と大きさ（元に戻すため）
+  winRect: null,         // 窓の位置と大きさ（次の起動で戻す）
+  winMax: false,         // 最大化していたか
   tools: [],             // ツール：{ enabled, name, path, args, browser }
   blocks: [],            // ブロックリスト（blocks.js）
 };
@@ -2034,10 +2036,10 @@ window.addEventListener('keydown', (e) => {
 
 // ---- 起動 ----
 // 新しい版のお知らせ（下の帯）
-initUpdateCheck({
-  settings, fetchText, openUrl,
-  current: async () => (tauri ? /PecaList (\S+)/.exec(await tauri.core.invoke('app_info'))?.[1] : '') || '',
-});
+const appVersion = async () => (tauri ? /PecaList (\S+)/.exec(await tauri.core.invoke('app_info'))?.[1] : '') || '';
+initUpdateCheck({ settings, fetchText, openUrl, current: appVersion });
+// 下の帯（新しい版のお知らせの横）に、今の版を出す
+appVersion().then((v) => { if (v) $('app-version').textContent = 'v' + v; }).catch(() => {});
 const ypErrorsUI = initYpErrorsUI({
   getYps: () => state.yps,
   getStatus: (name) => state.ypStatus.get(name),
@@ -2155,6 +2157,30 @@ window.addEventListener('resize', () => {
     if (settings.docked && Math.abs(window.innerWidth - settings.dockWidth) > 4) { settings.dockWidth = window.innerWidth; saveSettings(); }
   }, 600);
 });
+
+// 窓の位置と大きさを覚えておく（次の起動で Rust 側が戻す。lib.rs の restore_window）。
+// 張り付け中（dockRestore で別に覚えている）・最小化中は覚えない。最大化中は「最大化していた」だけ覚える
+let winTimer = 0;
+function rememberWindow() {
+  clearTimeout(winTimer);
+  winTimer = setTimeout(async () => {
+    if (settings.docked) return;
+    try {
+      const st = await tauri.core.invoke('window_state');
+      if (st.min || settings.docked) return;
+      const same = (a, b) => a && b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+      if (st.max === settings.winMax && (st.max || same(st.rect, settings.winRect))) return;
+      settings.winMax = st.max;
+      if (!st.max) settings.winRect = st.rect;
+      saveSettings();
+    } catch {}
+  }, 800);
+}
+if (tauri?.window) {
+  const w = tauri.window.getCurrentWindow();
+  w.onMoved(rememberWindow).catch(() => {});
+  w.onResized(rememberWindow).catch(() => {});
+}
 
 const notifyLog = initNotifyLog({ loadStore, saveStoreSoon });
 const recUI = initRecUI({

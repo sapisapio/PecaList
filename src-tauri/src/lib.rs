@@ -387,17 +387,65 @@ fn dock_right(app: tauri::AppHandle, width: f64) -> Result<WinRect, String> {
 fn undock(app: tauri::AppHandle, rect: WinRect) -> Result<(), String> {
   use tauri::Manager;
   let win = app.get_webview_window("main").ok_or("メインウィンドウがありません")?;
-  win.set_size(tauri::PhysicalSize::new(rect.w.max(360), rect.h.max(320))).map_err(|e| e.to_string())?;
+  set_outer_rect(&win, rect, 360, 320)
+}
+
+/// 窓を、外側の位置と大きさ rect にする（小さすぎるときは min_w・min_h まで広げる）
+fn set_outer_rect(win: &tauri::WebviewWindow, rect: WinRect, min_w: u32, min_h: u32) -> Result<(), String> {
+  win.set_size(tauri::PhysicalSize::new(rect.w.max(min_w), rect.h.max(min_h))).map_err(|e| e.to_string())?;
   let outer = win.outer_size().map_err(|e| e.to_string())?;
   // 外側の大きさで覚えているので、ずれた分を直す
   let (dw, dh) = (outer.width as i64 - rect.w as i64, outer.height as i64 - rect.h as i64);
   if dw != 0 || dh != 0 {
     let inner = win.inner_size().map_err(|e| e.to_string())?;
-    let w = (inner.width as i64 - dw).max(360) as u32;
-    let h = (inner.height as i64 - dh).max(320) as u32;
+    let w = (inner.width as i64 - dw).max(min_w as i64) as u32;
+    let h = (inner.height as i64 - dh).max(min_h as i64) as u32;
     win.set_size(tauri::PhysicalSize::new(w, h)).map_err(|e| e.to_string())?;
   }
   win.set_position(tauri::PhysicalPosition::new(rect.x, rect.y)).map_err(|e| e.to_string())
+}
+
+/// 今の窓の位置と大きさ（覚えておいて、次の起動で戻すため）。最大化・最小化しているかも返す
+#[derive(serde::Serialize)]
+struct WinState {
+  rect: WinRect,
+  max: bool,
+  min: bool,
+}
+
+#[tauri::command]
+fn window_state(app: tauri::AppHandle) -> Result<WinState, String> {
+  use tauri::Manager;
+  let win = app.get_webview_window("main").ok_or("メインウィンドウがありません")?;
+  let pos = win.outer_position().map_err(|e| e.to_string())?;
+  let size = win.outer_size().map_err(|e| e.to_string())?;
+  Ok(WinState {
+    rect: WinRect { x: pos.x, y: pos.y, w: size.width, h: size.height },
+    max: win.is_maximized().unwrap_or(false),
+    min: win.is_minimized().unwrap_or(false),
+  })
+}
+
+/// 起動したとき、前回覚えた窓の位置と大きさに戻す（settings.json の winRect・winMax）。
+/// 張り付けていたときは画面側で張り付け直すので何もしない。
+/// その場所がどの画面にも入っていなければ（画面を外したときなど）、初めの位置のままにする
+fn restore_window(win: &tauri::WebviewWindow, settings: &std::path::Path) {
+  let Ok(text) = std::fs::read_to_string(settings) else { return };
+  let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return };
+  if v["docked"].as_bool() == Some(true) { return; }
+  let Ok(rect) = serde_json::from_value::<WinRect>(v["winRect"].clone()) else { return };
+  let monitors = win.available_monitors().unwrap_or_default();
+  // タイトルバーのあたり（上の 40 点）が、どれかの画面の作業領域に 100 点以上入っていること
+  let visible = monitors.iter().any(|m| {
+    let a = m.work_area();
+    let (ax, ay, aw, ah) = (a.position.x, a.position.y, a.size.width as i32, a.size.height as i32);
+    let ix = (rect.x + rect.w as i32).min(ax + aw) - rect.x.max(ax);
+    let iy = (rect.y + 40).min(ay + ah) - rect.y.max(ay);
+    ix >= 100 && iy > 0
+  });
+  if !visible { return; }
+  let _ = set_outer_rect(win, rect, 160, 320);
+  if v["winMax"].as_bool() == Some(true) { let _ = win.maximize(); }
 }
 
 /// 張り付けているときの重なり方を「最下面」にしているか（クリックされても後ろに戻すため）
@@ -592,6 +640,7 @@ pub fn run() {
           return Err(error.into());
         }
       };
+      if let Some(win) = app.get_webview_window("main") { restore_window(&win, &data.join("settings.json")); }
       app.manage(data_dir::DataDir(data));
       create_notify_window(app.handle())?;
       create_tray(app.handle())?;
@@ -606,6 +655,7 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       app_info,
+      window_state,
       p2p::p2p_state,
       p2p::p2p_action,
       fetch_text,
