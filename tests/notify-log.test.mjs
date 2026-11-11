@@ -15,3 +15,5 @@ assert.equal(resultText({ shown: true, sticky: false }), '通知した（数秒�
 assert.equal(resultText({ shown: false, reason: 'startup' }), '出さなかった：' + REASONS.startup);
 assert.match(formatTime(new Date(2026, 10, 9, 7, 5, 3).getTime()), /^11\/9 07:05:03$/);
 console.log('notify-log tests ok');
+assert.equal(resultText({ shown: true, sticky: false, played: true }), '通知した（数秒で消える）・自動再生');
+assert.equal(resultText({ shown: false, reason: 'favOff', played: true }), '出さなかった：お気に入りの通知がオフ・自動再生');

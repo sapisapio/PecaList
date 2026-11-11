@@ -18,7 +18,7 @@ import { canRecord, cleanDir } from './recording.js';
 import { initMigrateUI } from './migrate-ui.js';
 import { initYpErrorsUI } from './yp-errors-ui.js';
 import { initUpdateCheck } from './update-check.js';
-import { updateEnded, playingRows } from './ended.js';
+import { updateEnded, pruneEnded, playingRows, ENDED_KEEPS, DEFAULT_ENDED_KEEP, endedKeepOf, endedKeepLabel } from './ended.js';
 import { linkify } from './links.js';
 import { channelMedia, mediaButtons, artworkImage } from './channel-media.js';
 import { eventSchedule, eventPriority, japanDay } from './events.js';
@@ -52,6 +52,7 @@ const defaults = {
   p2pHideListeners: false, // P2P の掲載でリスナー数・リレー数を非表示（-1）にする
   p2pBlocked: [],
   rankingEnabled: false,  // ランキング：ONの間だけ集計
+  endedKeep: DEFAULT_ENDED_KEEP, // 終了タブに出しておく時間（分。'refresh' は次の更新まで）
   activityEnabled: false, // 掲示板の勢い：ONの間だけ計測
   updateCheck: true,       // 新しい版が出ていないか、GitHub の配布ページを見る
   activityMinutes: 15,     // 勢いの取得間隔（15・30・60分）。利用者が増えると同じ掲示板に皆が取りに行くので、短くても15分
@@ -299,7 +300,7 @@ async function refresh() {
       state.ypStatus.set(yp.name, { ok: false, error: String(e) });
     }
   }));
-  updateEnded(state.ended, before, allChannels(), Date.now());
+  updateEnded(state.ended, before, allChannels(), Date.now(), settings.endedKeep);
   void probeStats();
   rankingUI.observe(observed);
   activityUI.sync();
@@ -600,7 +601,7 @@ function renderBody() {
     empty.textContent = !state.loadedOnce ? '読み込み中…'
       : state.search ? '検索に一致するチャンネルはありません'
       : state.tab === 'new' ? '新着のチャンネルはまだありません'
-      : state.tab === 'ended' ? 'この3時間に終わった配信はありません'
+      : state.tab === 'ended' ? (endedKeepOf(settings.endedKeep) === 'refresh' ? '前回の更新から終わった配信はありません' : `この${endedKeepLabel(settings.endedKeep)}に終わった配信はありません`)
       : state.tab === 'playing' ? 'ペカステで再生しているチャンネルはありません'
       : state.tab === 'fav' ? (state.filters.length ? 'お気に入りのチャンネルは配信していません' : 'お気に入りはまだありません。チャンネルを右クリック →「お気に入りに追加」か、フィルタタブでペカレコの Filter.xml を読み込めます')
       : 'チャンネルを取得できませんでした';
@@ -1045,6 +1046,13 @@ function openMenu(x, y, ch) {
       it.classList.add(cur === v ? 'check' : 'uncheck');
       menu.appendChild(it);
     }
+    const g3 = document.createElement('div');
+    g3.className = 'group';
+    g3.textContent = `再生（フィルタ「${ev.favorite.name}」）`;
+    menu.appendChild(g3);
+    const ap = menuItem('新着時に自動再生する', () => setFavoriteAutoPlay(ev.favorite, !ev.favorite.favoriteOpts?.player));
+    ap.classList.add(ev.favorite.favoriteOpts?.player ? 'check' : 'uncheck');
+    menu.appendChild(ap);
   } else {
     menu.appendChild(menuItem('お気に入りに追加', () => quickFilter(ch, { favorite: true }), !ch.info));
   }
@@ -1145,6 +1153,7 @@ function notifyNew() {
     if (ch && ev.favorite && !ev.ignore) logOf(ch, ev, { shown: false, reason: 'returned' });
   }
   const targets = [];
+  const autoPlays = [];
   let alarm = null;
   for (const key of state.justNew) {
     const ch = findChannel(key);
@@ -1154,17 +1163,21 @@ function notifyNew() {
     if (ev.ignore) { if (ev.favorite) logOf(ch, ev, { shown: false, reason: 'ng' }); continue; }
     const style = ev.favorite ? favoriteNotifyStyle(ev.favorite) : null;
     const favNotify = ev.favorite && style !== 'none';
+    // 「新着時に自動再生する」お気に入り（通知を出すかどうかとは別に決める）
+    const played = !!ev.favorite?.favoriteOpts?.player;
+    if (played) autoPlays.push(ch);
     if ((settings.notifyFav && favNotify) || (settings.notifyAllNew && style !== 'none')) {
       const sticky = (style && style !== 'default' ? style : settings.notifyMode) === 'sticky';
       targets.push({ ch, fav: !!ev.favorite, sticky });
-      logOf(ch, ev, { shown: true, sticky });
+      logOf(ch, ev, { shown: true, sticky, played });
       // ペカレコから引き継いだ、フィルタごとの通知音
       if (!alarm && ev.favorite?.notify?.alarm) alarm = ev.favorite.notify.alarm;
     } else if (ev.favorite) {
-      logOf(ch, ev, { shown: false, reason: style === 'none' ? 'styleNone' : 'favOff' });
+      logOf(ch, ev, { shown: false, reason: style === 'none' ? 'styleNone' : 'favOff', played });
     }
   }
   notifyLog.add(log);
+  for (const ch of autoPlays) void play(ch, true);
   if (targets.length === 0) return;
   // お気に入りを先に
   targets.sort((a, b) => Number(b.fav) - Number(a.fav));
@@ -1283,6 +1296,15 @@ function setFavoriteNotifyStyle(f, style) {
   toast(`「${f.name}」の通知：${NOTIFY_STYLES.find((x) => x[0] === style)[1]}`);
 }
 
+function setFavoriteAutoPlay(f, on) {
+  const i = state.filters.indexOf(f);
+  if (i < 0) return;
+  const list = state.filters.slice();
+  list[i] = { ...f, favoriteOpts: { ...f.favoriteOpts, player: on } };
+  setFilters(list);
+  toast(`「${f.name}」の新着時の自動再生：${on ? 'する' : 'しない'}`);
+}
+
 // ---- 右クリックからのフィルタ作成 ----
 function channelFilter(ch, over) {
   const fields = { ...newFilter().base.fields };
@@ -1328,14 +1350,15 @@ async function launch(path, args) {
 
 const argExtra = (ch) => ({ filterName: evalOf(ch).first?.name || '' });
 
-async function play(ch) {
+// auto：お気に入りの新着の自動再生（ブロックリストの「自動の再生」で判定する）
+async function play(ch, auto = false) {
   if (!ch || ch.info) return;
   const p = findPlayer(settings.players, ch);
   if (!p) {
     toast(`${ch.type || 'この形式'} に対応するプレイヤーが設定されていません（⚙ 設定）`);
     return;
   }
-  const b = await blockedBy(ch, 'manualPlay');
+  const b = await blockedBy(ch, auto ? 'autoPlay' : 'manualPlay');
   if (b) { toast(`「${ch.name}」はブロックリスト（${blockLabel(b)}）に当たるので再生しません`); return; }
   try {
     await launch(p.path, buildArgs(p.args, ch, settings.peercast, argExtra(ch)));
@@ -1786,6 +1809,7 @@ function renderPlaceholderHelp() {
   $('ph-list').replaceChildren(grid);
 }
 
+$('opt-ended-keep').append(...ENDED_KEEPS.map(([v, label]) => new Option(label, String(v))));
 function openSettings() {
   $('settings-err').textContent = '';
   draftPlayers = settings.players.map((p) => ({ ...p }));
@@ -1828,6 +1852,7 @@ function openSettings() {
   $('opt-rec-notify').checked = settings.recNotify;
   $('opt-activity').checked = settings.activityEnabled;
   $('opt-ranking').checked = settings.rankingEnabled;
+  $('opt-ended-keep').value = String(endedKeepOf(settings.endedKeep));
   $('opt-update').checked = settings.updateCheck !== false;
   $('settings').hidden = false;
 }
@@ -1898,6 +1923,8 @@ $('settings-save').addEventListener('click', () => {
   settings.recNotify = $('opt-rec-notify').checked;
   settings.activityEnabled = $('opt-activity').checked;
   settings.rankingEnabled = $('opt-ranking').checked;
+  { const v = $('opt-ended-keep').value; settings.endedKeep = endedKeepOf(v === 'refresh' ? v : Number(v)); }
+  pruneEnded(state.ended, Date.now(), settings.endedKeep);
   rankingUI.render();
   settings.updateCheck = $('opt-update').checked;
   activityUI.sync();

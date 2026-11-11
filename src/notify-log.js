@@ -29,8 +29,9 @@ export function addEntries(list, entries) {
 }
 
 export function resultText(e) {
-  if (e.shown) return e.sticky ? '通知した（確認するまで出す）' : '通知した（数秒で消える）';
-  return '出さなかった：' + (REASONS[e.reason] || e.reason);
+  const text = e.shown ? (e.sticky ? '通知した（確認するまで出す）' : '通知した（数秒で消える）')
+    : '出さなかった：' + (REASONS[e.reason] || e.reason);
+  return e.played ? text + '・自動再生' : text;
 }
 
 // ctx：loadStore, saveStoreSoon

@@ -3,8 +3,14 @@
 
 // 「終了」タブと「再生中」タブの中身の計算（画面に触らない）。
 
-export const ENDED_KEEP_MS = 3 * 60 * 60 * 1000; // 終わった配信を出しておく時間
-export const ENDED_MAX = 300;
+// 終わった配信を出しておく時間（分）。'refresh' は次の更新まで
+export const ENDED_KEEPS = [['refresh', '次の更新まで'], [60, '1時間'], [180, '3時間'], [1440, '24時間']];
+export const DEFAULT_ENDED_KEEP = 180;
+export const ENDED_MAX = 1000;
+export const endedKeepOf = (v) => ENDED_KEEPS.some(([k]) => k === v) ? v : DEFAULT_ENDED_KEEP;
+export const endedKeepLabel = (v) => ENDED_KEEPS.find(([k]) => k === endedKeepOf(v))[1];
+// 配信者名は全角半角・大文字小文字をそろえて比べる
+const nameKey = (c) => (c.name || '').normalize('NFKC').trim().toLocaleLowerCase('ja-JP');
 
 const realId = (ch) => {
   const id = (ch.id || '').toUpperCase();
@@ -12,22 +18,30 @@ const realId = (ch) => {
 };
 
 // 更新の前後の一覧を比べ、消えた配信を ended（key → 最後に見えたときの中身＋終わった時刻）に入れる。
-// また見えるようになった配信は ended から外す。別の YP の行として残っている配信（同じチャンネルID）は終わっていない。
+// また見えるようになった配信は ended から外す（チャンネルIDが変わっていても、同じ配信者名なら外す）。
+// 同じ配信者名の終わった配信は、いちばん新しいもの1つだけ残す。
+// 別の YP の行として残っている配信（同じチャンネルID）は終わっていない。
 // 取得に失敗した YP は前回の一覧を残しているので、失敗しただけでは終わったことにならない
-export function updateEnded(ended, before, after, now) {
-  const liveKeys = new Set(after.map((c) => c.key));
-  const liveIds = new Set(after.map(realId).filter(Boolean));
-  for (const [key, c] of ended) if (liveKeys.has(key) || liveIds.has(realId(c))) ended.delete(key);
+export function updateEnded(ended, before, after, now, keep = DEFAULT_ENDED_KEEP) {
+  if (endedKeepOf(keep) === 'refresh') ended.clear();
+  const live = after.filter((c) => !c.info && !c.event);
+  const liveKeys = new Set(live.map((c) => c.key));
+  const liveIds = new Set(live.map(realId).filter(Boolean));
+  const liveNames = new Set(live.map(nameKey));
+  const isLive = (c) => liveKeys.has(c.key) || liveIds.has(realId(c)) || liveNames.has(nameKey(c));
+  for (const [key, c] of ended) if (isLive(c)) ended.delete(key);
   for (const c of before) {
-    if (c.info || c.event || liveKeys.has(c.key) || liveIds.has(realId(c))) continue;
+    if (c.info || c.event || isLive(c)) continue;
+    for (const [key, e] of ended) if (nameKey(e) === nameKey(c)) ended.delete(key);
     ended.set(c.key, { ...c, ended: now });
   }
-  pruneEnded(ended, now);
+  pruneEnded(ended, now, keep);
   return ended;
 }
 
-export function pruneEnded(ended, now) {
-  for (const [key, c] of ended) if (now - c.ended > ENDED_KEEP_MS) ended.delete(key);
+export function pruneEnded(ended, now, keep = DEFAULT_ENDED_KEEP) {
+  const k = endedKeepOf(keep);
+  if (k !== 'refresh') for (const [key, c] of ended) if (now - c.ended > k * 60_000) ended.delete(key);
   if (ended.size > ENDED_MAX) {
     const old = [...ended.values()].sort((a, b) => a.ended - b.ended).slice(0, ended.size - ENDED_MAX);
     for (const c of old) ended.delete(c.key);

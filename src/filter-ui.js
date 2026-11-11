@@ -269,6 +269,7 @@ export function initFilterUI(ctx) {
     $('fe-icase').checked = draft.icase;
     $('fe-width').checked = draft.width;
     rangeFields();
+    $('fe-autoplay').checked = !!draft.favoriteOpts?.player;
     $('fe-new').value = draft.newCond.new ? 'new' : draft.newCond.notNew ? 'notNew' : '';
     $('fe-notify').value = draft.notify?.notify === false && (draft.notifyStyle || 'default') === 'default' ? 'none' : (draft.notifyStyle || 'default');
     $('fe-text-on').checked = !!draft.color.text;
@@ -295,6 +296,7 @@ export function initFilterUI(ctx) {
     draft.width = $('fe-width').checked;
     draft.notifyStyle = $('fe-notify').value;
     draft.notify = { ...draft.notify, notify: draft.notifyStyle !== 'none' };
+    draft.favoriteOpts = { ...draft.favoriteOpts, player: $('fe-autoplay').checked };
     const nv = $('fe-new').value;
     draft.newCond = { new: nv === 'new', notNew: nv === 'notNew' };
     draft.color = {
