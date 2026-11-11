@@ -1809,6 +1809,7 @@ function renderPlaceholderHelp() {
   $('ph-list').replaceChildren(grid);
 }
 
+const AUTO_SECS = [30, 60, 120, 180, 300, 600, 900, 1800]; // 自動更新の間隔の選択肢（秒）
 $('opt-ended-keep').append(...ENDED_KEEPS.map(([v, label]) => new Option(label, String(v))));
 function openSettings() {
   $('settings-err').textContent = '';
@@ -1853,6 +1854,10 @@ function openSettings() {
   $('opt-activity').checked = settings.activityEnabled;
   $('opt-ranking').checked = settings.rankingEnabled;
   $('opt-ended-keep').value = String(endedKeepOf(settings.endedKeep));
+  // 自動更新の間隔：ペカレコから取り込んだ値が選択肢にないときは、その値も出す
+  $('opt-auto-sec').replaceChildren(...[...new Set([...AUTO_SECS, settings.autoSec])].sort((a, b) => a - b)
+    .map((s) => new Option(s < 60 ? `${s}秒` : `${s / 60}分`, String(s))));
+  $('opt-auto-sec').value = String(settings.autoSec);
   $('opt-update').checked = settings.updateCheck !== false;
   $('settings').hidden = false;
 }
@@ -1925,6 +1930,11 @@ $('settings-save').addEventListener('click', () => {
   settings.rankingEnabled = $('opt-ranking').checked;
   { const v = $('opt-ended-keep').value; settings.endedKeep = endedKeepOf(v === 'refresh' ? v : Number(v)); }
   pruneEnded(state.ended, Date.now(), settings.endedKeep);
+  const autoSec = Number($('opt-auto-sec').value);
+  if (autoSec >= 30 && autoSec !== settings.autoSec) {
+    settings.autoSec = autoSec;
+    state.nextRefreshAt = Date.now() + autoSec * 1000;
+  }
   rankingUI.render();
   settings.updateCheck = $('opt-update').checked;
   activityUI.sync();
