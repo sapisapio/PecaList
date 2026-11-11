@@ -36,8 +36,13 @@ export function initActivityUI(ctx) {
       const count = r.loading && r.count == null ? '取得中…'
         : r.busy ? (r.count == null ? '混雑のため次回' : `${r.count}件（前回）`)
         : r.error ? '取得失敗' : r.count == null ? '計測待ち（基準取得済み）' : `${r.count}件`;
-      for (const value of [r.count == null ? '−' : rank, [...r.channels].join(' / '), count, r.count == null ? '−' : `${(r.elapsed / 60000).toFixed(1)}分`, r.name, r.at ? new Date(r.at).toLocaleTimeString('ja-JP') : '−']) {
-        const td = document.createElement('td'); td.textContent = value;
+      const names = [...r.channels];
+      tr.dataset.name = names[0] || '';
+      for (const value of [r.count == null ? '−' : rank, names, count, r.count == null ? '−' : `${(r.elapsed / 60000).toFixed(1)}分`, r.name, r.at ? new Date(r.at).toLocaleTimeString('ja-JP') : '−']) {
+        const td = document.createElement('td');
+        // 配信者は名前ごとに分ける（同じ掲示板の配信者が何人かいるとき、右クリックした名前の配信を選ぶため）
+        if (Array.isArray(value)) value.forEach((n, i) => { if (i) td.append(' / '); const s = document.createElement('span'); s.dataset.name = n; s.textContent = n; td.append(s); });
+        else td.textContent = value;
         if (r.error) td.title = r.error;
         else if (r.busy) td.title = '掲示板が混んでいると返したので、しばらく待ってから取り直します';
         tr.append(td);
@@ -46,6 +51,17 @@ export function initActivityUI(ctx) {
     });
     table.append(body); box.append(table);
   }
+  // 行の操作は、チャンネル一覧と同じ（右クリックのメニュー・ダブルクリック・中クリック）
+  const nameAt = (e) => e.target.closest('[data-name]')?.dataset.name;
+  $('activity-results').addEventListener('contextmenu', (e) => {
+    const name = nameAt(e);
+    if (name == null) return;
+    e.preventDefault();
+    ctx.openMenu(name, e.clientX, e.clientY);
+  });
+  $('activity-results').addEventListener('dblclick', (e) => { const name = nameAt(e); if (name) ctx.clickAction('dbl', name); });
+  $('activity-results').addEventListener('mousedown', (e) => { if (e.button === 1 && nameAt(e)) e.preventDefault(); });
+  $('activity-results').addEventListener('auxclick', (e) => { const name = nameAt(e); if (e.button === 1 && name) ctx.clickAction('mid', name); });
   $('activity-enabled').addEventListener('change', () => {
     ctx.settings.activityEnabled = $('activity-enabled').checked;
     ctx.saveSettings();

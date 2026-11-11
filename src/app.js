@@ -2016,9 +2016,18 @@ const ypErrorsUI = initYpErrorsUI({
     toast(`${selected.size}件のYPの取得を停止しました。設定で再開できます`);
   },
 });
+const activityChannels = () => allChannels().filter((ch) => (ch.p2pOnly || state.ypStatus.get(ch.ypName)?.ok) && !evalOf(ch).ignore);
+// 勢いの行（配信者名）から、今の配信を探す。勢いは記録を残さないので、終わった配信は見つからない
+function activityChannel(name) {
+  const ch = activityChannels().find((c) => c.name === name && !c.info);
+  if (!ch) toast('この配信は今の一覧にありません');
+  return ch;
+}
 const activityUI = initActivityUI({
   settings, saveSettings,
-  channels: () => allChannels().filter((ch) => (ch.p2pOnly || state.ypStatus.get(ch.ypName)?.ok) && !evalOf(ch).ignore),
+  channels: activityChannels,
+  openMenu: (name, x, y) => { const ch = activityChannel(name); if (ch) openMenu(x, y, ch); },
+  clickAction: (kind, name) => { const ch = activityChannel(name); if (ch) clickAction(kind === 'dbl' ? settings.dblAction : settings.midAction, ch); },
   fetch: async (url) => {
     if (tauri) return tauri.core.invoke('fetch_bbs_subject', {url});
     const res = await fetch(url);
