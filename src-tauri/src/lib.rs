@@ -6,6 +6,7 @@ mod p2p;
 mod flv;
 mod recorder;
 mod data_dir;
+mod single;
 
 use std::time::Duration;
 
@@ -616,6 +617,11 @@ pub fn run() {
   // 設定の置き場所は、窓を作る前に決める（画面の一時データの場所も、ここで exe の横に向ける）
   let prepared = std::env::current_exe().map_err(|e| e.to_string())
     .and_then(|exe| data_dir::prepare(&exe, std::env::var_os("PECALIST_DATA_DIR"), &data_dir::OldDirs::from_env()));
+  // 同じ設定フォルダーの PecaList がもう動いていたら、そちらの窓を出して、こちらは終わる
+  let single = match &prepared {
+    Ok(dir) => match single::claim(dir) { Some(h) => h, None => return },
+    Err(_) => 0,
+  };
   let mut context = tauri::generate_context!();
   let webview = match &prepared {
     Ok(dir) => data_dir::webview_dir(dir),
@@ -644,6 +650,8 @@ pub fn run() {
       app.manage(data_dir::DataDir(data));
       create_notify_window(app.handle())?;
       create_tray(app.handle())?;
+      let handle = app.handle().clone();
+      single::listen(single, move || show_main(&handle));
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()

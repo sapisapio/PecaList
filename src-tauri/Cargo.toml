@@ -1,6 +1,6 @@
 [package]
 name = "pecalist"
-version = "0.2.33"
+version = "0.2.34"
 description = "PecaList"
 authors = ["sapisapio"]
 license = "GPL-3.0-or-later"
@@ -30,4 +30,4 @@ tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tokio = { version = "1", features = ["time", "sync"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
-windows-sys = { version = "0.61", features = ["Win32_UI_Shell", "Win32_Graphics_Dwm", "Win32_Storage_FileSystem", "Win32_Foundation", "Win32_Networking_WinSock", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_UI_Shell", "Win32_Graphics_Dwm", "Win32_Storage_FileSystem", "Win32_Foundation", "Win32_Networking_WinSock", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_Security"] }
