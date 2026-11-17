@@ -689,6 +689,7 @@ pub fn run() {
       recorder::rec_start,
       recorder::rec_stop,
       recorder::rec_refresh_header,
+      recorder::rec_split,
       recorder::rec_open,
       recorder::rec_reveal,
       recorder::rec_trash,

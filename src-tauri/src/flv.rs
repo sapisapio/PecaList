@@ -168,6 +168,7 @@ const AUDIO_ONLY_AFTER: u32 = 100;
 /// 新しいファイルを始めるのは次のときだけ：
 /// - まだファイルがない（映像の切れ目が初めて届いた）
 /// - 配信の形式（解像度など、再生の準備の情報）が変わった
+/// - 区切るよう頼まれた（split。配信の詳細が変わったときなど）
 #[derive(Default)]
 pub struct Splicer {
   // 今書いているファイル
@@ -187,6 +188,8 @@ pub struct Splicer {
   last_in_ts: u32,
   /// 今のファイルに、つなぎ目がいくつあるか
   pub seams: u32,
+  /// 次の映像の切れ目から新しいファイルにする
+  split_next: bool,
 }
 
 impl Splicer {
@@ -202,6 +205,13 @@ impl Splicer {
     self.conn_saw_video = false;
     self.conn_audio_waiting = 0;
     self.waiting_key = true;
+  }
+
+  /// 同じ接続のまま、次の映像の切れ目から新しいファイルにする
+  pub fn split(&mut self) {
+    if self.file_open {
+      self.split_next = true;
+    }
   }
 
   /// ファイルを書き始めているか
@@ -244,6 +254,9 @@ impl Splicer {
 
     let is_key = tag.kind == TAG_VIDEO && video_kind(&tag.data) == VideoKind::Keyframe;
 
+    if self.split_next && is_key && !self.waiting_key {
+      self.waiting_key = true;
+    }
     if self.waiting_key {
       let audio_only_start = tag.kind == TAG_AUDIO && !self.conn_saw_video && self.conn_video_config.is_none() && {
         self.conn_audio_waiting += 1;
@@ -253,7 +266,8 @@ impl Splicer {
         // 映像の切れ目が来るまでは書かない（頭の部分だけのファイルや、乱れた映像を作らない）
         return out;
       }
-      let same_format = self.file_open
+      let same_format = !self.split_next
+        && self.file_open
         && self.file_video_config == self.conn_video_config
         && (self.conn_audio_config.is_none() || self.file_audio_config == self.conn_audio_config);
       if same_format {
@@ -272,6 +286,7 @@ impl Splicer {
         self.offset = 0;
         self.last_out_ts = 0;
         self.seams = 0;
+        self.split_next = false;
       }
       self.base_in = tag.ts;
       self.last_in_ts = tag.ts;
@@ -594,6 +609,28 @@ mod tests {
     assert_eq!(new_files(&a), 0, "同じ形式なら同じファイルの続き");
     assert_eq!(writes(&a), vec![(TAG_VIDEO, 66 + 33), (TAG_VIDEO, 66 + 33 + 33)]);
     assert_eq!(s.seams, 1);
+  }
+
+  #[test]
+  fn split_starts_new_file_at_next_keyframe() {
+    let mut s = Splicer::new();
+    // ファイルがないうちは区切らない
+    s.split();
+    let a = connect(&mut s, &AVC_CFG, vec![key(1000), inter(1033), aud(1040)]);
+    assert_eq!(new_files(&a), 1);
+    // 同じ接続のまま区切る：切れ目の前のコマは今のファイルに書き、切れ目から新しいファイルを時刻0で始める
+    s.split();
+    let mut a = Vec::new();
+    for t in [inter(1066), aud(1070), key(1100), inter(1133)] {
+      a.extend(s.push(t));
+    }
+    assert_eq!(new_files(&a), 1);
+    assert!(matches!(&a[2], Action::NewFile { video_config: Some(v), .. } if v == &AVC_CFG.to_vec()));
+    assert_eq!(writes(&a), vec![(TAG_VIDEO, 66), (TAG_AUDIO, 70), (TAG_VIDEO, 0), (TAG_VIDEO, 33)]);
+    assert_eq!(s.seams, 0);
+    // 1回区切ったら、そのあとの切れ目では区切らない
+    let a = s.push(key(2100));
+    assert_eq!(new_files(&a), 0);
   }
 
   #[test]

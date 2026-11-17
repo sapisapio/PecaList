@@ -9,8 +9,23 @@ const WEEK_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEK_JA = ['日', '月', '火', '水', '木', '金', '土'];
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 
-// 録画のファイル名の書式（ペカレコと同じ記号）。初めは今までの PecaList と同じ名前：チャンネル名_20261108_Sun_135520
-export const DEFAULT_REC_FORMAT = '$0_$Y$M$D_$w_$h$m$s';
+// 録画のファイル名の書式（ペカレコと同じ記号）。
+// PecaList のデフォルト（新しく使い始める人の初め）：チャンネル名(261117-21時03分)ジャンル-詳細「コメント」
+export const DEFAULT_REC_FORMAT = '$0($y$M$D-$h時$m分)$B$8';
+// 0.2.34 までの PecaList の名前（チャンネル名_20261108_Sun_135520）。前から使っている人はこのまま
+export const LEGACY_REC_FORMAT = '$0_$Y$M$D_$w_$h$m$s';
+// 設定画面の「テンプレート」。PecaList のデフォルトと、ペカレコにあるテンプレート（ペカレコの「デフォルト」は名前が重なるので「旧デフォルト」）
+export const REC_TEMPLATES = [
+  ['デフォルト', DEFAULT_REC_FORMAT],
+  ['旧デフォルト', '$0 $Y$M$D $w $h$m$s $x'],
+  ['チャンネル詳細1', '$0 $Y$M$D $w $h$m$s $7$8$9'],
+  ['チャンネル詳細2', '$0($Y$M$D$w$h$m$s)$A$8$4$5$6'],
+  ['漢字', '$0 $Y年$M月$D日($W)$h時$m分$s秒 $7$8$9'],
+];
+// ペカレコの初めの書式のままか（画面の「デフォルト」はスペース区切り、保存されるのは「_」区切り）
+export const isPecarecDefaultFormat = (f) => String(f || '').trim().replace(/ /g, '_') === '$0_$Y$M$D_$w_$h$m$s_$x';
+// 設定画面などの見本に使う配信
+export const REC_SAMPLE = { name: 'チャンネル名', genre: 'ジャンル', detail: '詳細', comment: 'コメント', trackArtist: 'アーティスト', trackTitle: 'タイトル', trackAlbum: 'アルバム' };
 // 設定画面の「記号を入れる」に出すもの
 export const REC_TOKENS = [
   ['$Y', '西暦（4桁）'], ['$y', '西暦（2桁）'], ['$M', '月'], ['$D', '日'], ['$w', '曜日（英字）'], ['$W', '曜日（漢字）'],

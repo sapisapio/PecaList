@@ -19,6 +19,8 @@ const MAX_HISTORY = 3000;
 // データが届き続けていても止める（終わった配信が、どこかの古いリレーから流れ続けることがあるため）。
 // 1回だけ消えるYPの揺れで録画が分かれないよう、2回続けて消えたときにする（取得に失敗したYPは前の一覧が残るので数えない）
 const GONE_REFRESHES = 2;
+// 詳細が変わってファイルを区切ったあと、これだけは次の区切りをしない（詳細を行ったり来たりする配信で細切れにしない）
+const SPLIT_MIN_MS = 5 * 60 * 1000;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -70,6 +72,11 @@ export function initRecUI(ctx) {
   }
 
   // ---- 開始・停止 ----
+  // 録画のファイル名（拡張子なし）。詳細は一覧と同じく <Open> / <Free> を外す
+  const plainDetail = (ch) => cleanDescription(ch.detail, settings.showOpenFree);
+  const fileName = (ch) => recFileName(settings.recFormat, { ...ch, detail: plainDetail(ch) }, new Date(),
+    { underbar: settings.recUnderbar, fullwidth: settings.recFullwidth });
+
   async function start(ch, auto = null) {
     if (!ch) { ctx.toast('チャンネルタブで録画するチャンネルを選んでください'); return; }
     if (!canRecord(ch)) { ctx.toast(`${ch.type || 'この形式'} の配信はまだ録画できません（FLV のみ）`); return; }
@@ -93,14 +100,14 @@ export function initRecUI(ctx) {
           peercast: settings.peercast, channelId: cid, tip: ch.tip || '',
           dir: settings.recDir, sub: settings.recSubFolder ? ch.name : '',
           // 詳細は一覧と同じく <Open> / <Free> を外す
-          base: recFileName(settings.recFormat, { ...ch, detail: cleanDescription(ch.detail, settings.showOpenFree) }, new Date(), { underbar: settings.recUnderbar, fullwidth: settings.recFullwidth }), waitSec: settings.recWaitMin * 60,
+          base: fileName(ch), waitSec: settings.recWaitMin * 60,
         },
       });
       userStopped.delete(cid);
       active.set(id, {
         id, channelId: cid, key: ch.key, name: ch.name, detail: ctx.detailText(ch), auto,
         state: 'connecting', ms: 0, bytes: 0, seams: 0, waitLeft: 0, error: '', gone: 0,
-        files: [], item: null,
+        files: [], item: null, plain: plainDetail(ch), fileAt: Date.now(),
       });
       if (settings.recNotify) {
         popup(id, { kind: 'rec-start', name: ch.name, detail: (auto ? `自動録画（${auto}）・` : '') + ctx.detailText(ch), chKey: ch.key });
@@ -195,6 +202,16 @@ export function initRecUI(ctx) {
     tauri.event.listen('rec:file', (e) => onFile(e.payload));
   }
 
+  // 配信の詳細が変わったら、録画を止めずに次の映像の切れ目から新しいファイルにする（設定でオンのとき）
+  function splitIfChanged(r, chans) {
+    if (!settings.recSplitDetail || !r.item) return;
+    const ch = chans.find((c) => c.id && c.id.toUpperCase() === r.channelId);
+    if (!ch || plainDetail(ch) === r.plain || Date.now() - r.fileAt < SPLIT_MIN_MS) return;
+    invoke('rec_split', { id: r.id, base: fileName(ch) }).then(() => {
+      Object.assign(r, { plain: plainDetail(ch), fileAt: Date.now(), detail: ctx.detailText(ch) });
+    }).catch(() => {});
+  }
+
   // ---- 一覧の更新ごと：自動録画と、終わった配信の見切り ----
   function onRefresh(options = {}) {
     const chans = ctx.allChannels();
@@ -202,7 +219,7 @@ export function initRecUI(ctx) {
     for (const id of [...userStopped]) if (!present.has(id)) userStopped.delete(id);
     for (const r of active.values()) {
       if(options.p2pEvent) continue; // 通常YPの更新周期で終了待ち回数を数える
-      if (present.has(r.channelId)) { r.gone = 0; continue; }
+      if (present.has(r.channelId)) { r.gone = 0; splitIfChanged(r, chans); continue; }
       r.gone++;
       if (r.gone >= GONE_REFRESHES) invoke('rec_stop', { id: r.id }).catch(() => {});
     }
@@ -257,7 +274,7 @@ export function initRecUI(ctx) {
       const [st, cls] = stateText(r);
       why.append(el('span', 'state ' + cls, st), el('span', r.auto ? 'tag auto' : 'tag', r.auto ? `自動：${r.auto}` : '手動'));
       if (r.seams > 0) why.appendChild(el('span', '', `${r.seams}回つなぎ直し`));
-      if (r.files.length > 0) why.appendChild(el('span', '', `配信の形式が変わったので、${r.files.length + 1}つ目のファイルです`));
+      if (r.files.length > 0) why.appendChild(el('span', '', `${r.files.length + 1}つ目のファイルです`));
       if (r.error && r.state !== 'recording') why.appendChild(el('span', 'err', r.error));
       const play = btn('btn sm', '追っかけ再生', () => playLive(r), '録画を止めずに、ここまでの録画を開きます');
       play.disabled = !r.item;

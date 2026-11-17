@@ -177,6 +177,8 @@ struct FileEvent {
 
 struct Control {
   stop: AtomicBool,
+  /// 画面から「ここで区切って、この名前の新しいファイルにして」と頼まれている
+  split: Mutex<Option<String>>,
   /// 画面から「先頭を今の内容で書き直して」と頼まれている
   header: AtomicBool,
   wake: tokio::sync::Notify,
@@ -272,7 +274,7 @@ pub fn rec_start(app: tauri::AppHandle, recs: tauri::State<'_, Recorders>, req: 
   }
   let dir = if req.sub.is_empty() { dir.to_path_buf() } else { dir.join(safe_name(&req.sub)) };
   let id = recs.next.fetch_add(1, Ordering::SeqCst) + 1;
-  let control = Arc::new(Control { stop: AtomicBool::new(false), header: AtomicBool::new(false), wake: tokio::sync::Notify::new() });
+  let control = Arc::new(Control { stop: AtomicBool::new(false), split: Mutex::new(None), header: AtomicBool::new(false), wake: tokio::sync::Notify::new() });
   let job = Job {
     id,
     app: app.clone(),
@@ -299,6 +301,15 @@ pub async fn rec_refresh_header(recs: tauri::State<'_, Recorders>, id: u64) -> R
   while control.header.load(Ordering::SeqCst) && Instant::now() < until {
     tokio::time::sleep(Duration::from_millis(50)).await;
   }
+  Ok(())
+}
+
+/// 録画を止めずに、次の映像の切れ目から新しいファイルにする（配信の詳細が変わったとき）。base は新しいファイル名（拡張子なし）
+#[tauri::command]
+pub fn rec_split(recs: tauri::State<'_, Recorders>, id: u64, base: String) -> Result<(), String> {
+  let map = recs.map.lock().unwrap();
+  let (control, _) = map.get(&id).ok_or("この録画はもう終わっています")?;
+  *control.split.lock().unwrap() = Some(safe_name(&base));
   Ok(())
 }
 
@@ -385,6 +396,10 @@ struct Progress {
   state: &'static str,
   writer: Option<FileWriter>,
   file_no: u32,
+  /// 区切ったあとのファイル名（拡張子なし）。なければ録画を始めたときの名前
+  base: Option<String>,
+  /// 次に新しいファイルを始めるときに使う名前
+  next_base: Option<String>,
   splicer: Splicer,
   /// 最後に映像や音声を書いた時刻（ここから待つ時間を数える）
   last_media: Instant,
@@ -447,8 +462,12 @@ impl Job {
       match a {
         Action::NewFile { meta, video_config, audio_config } => {
           self.close_file(p);
+          if let Some(b) = p.next_base.take() {
+            p.base = Some(b);
+            p.file_no = 0;
+          }
           p.file_no += 1;
-          let path = file_path(&self.dir, &self.base, p.file_no);
+          let path = file_path(&self.dir, p.base.as_deref().unwrap_or(&self.base), p.file_no);
           let w = FileWriter::open(path, meta, video_config, audio_config).map_err(|e| format!("ファイルを作れませんでした: {e}"))?;
           p.writer = Some(w);
         }
@@ -506,6 +525,10 @@ impl Job {
         Err(e) => return ReadEnd::Error(e),
       };
       for tag in tags {
+        if let Some(b) = self.control.split.lock().unwrap().take() {
+          p.next_base = Some(b);
+          p.splicer.split();
+        }
         let actions = p.splicer.push(tag);
         if let Err(e) = self.handle(p, actions) {
           return ReadEnd::Error(e);
@@ -621,6 +644,8 @@ impl Progress {
       state: "connecting",
       writer: None,
       file_no: 0,
+      base: None,
+      next_base: None,
       splicer: Splicer::new(),
       last_media: Instant::now(),
       last_status: Instant::now(),

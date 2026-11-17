@@ -1,10 +1,22 @@
 import assert from 'node:assert';
-import { recFileName, DEFAULT_REC_FORMAT, formatDuration, formatHours, formatBytes, formatSpan, inRange, groupByDay, weeklyByFilter, isHeavy, daysLeft, canRecord } from '../src/recording.js';
+import { recFileName, REC_TEMPLATES, DEFAULT_REC_FORMAT, LEGACY_REC_FORMAT, isPecarecDefaultFormat, formatDuration, formatHours, formatBytes, formatSpan, inRange, groupByDay, weeklyByFilter, isHeavy, daysLeft, canRecord } from '../src/recording.js';
 
 const at = (y, mo, d, h = 0, mi = 0, s = 0) => new Date(y, mo - 1, d, h, mi, s).getTime();
 
 // ファイル名はペカレコと同じ並び
-assert.strictEqual(recFileName(DEFAULT_REC_FORMAT, { name: 'みかん' }, new Date(at(2026, 11, 8, 13, 55, 20))), 'みかん_20261108_Sun_135520');
+assert.strictEqual(recFileName(LEGACY_REC_FORMAT, { name: 'みかん' }, new Date(at(2026, 11, 8, 13, 55, 20))), 'みかん_20261108_Sun_135520');
+// PecaList のデフォルトの書式：チャンネル名(日付（年は2桁）-時刻)ジャンル-詳細「コメント」
+assert.strictEqual(recFileName(DEFAULT_REC_FORMAT, { name: 'DBRK', genre: 'Game', detail: 'ウィズダフネ', comment: '初見' }, new Date(at(2026, 11, 17, 20, 3)), { underbar: true }), 'DBRK(261117-20時03分)Game-ウィズダフネ「初見」');
+// ジャンルやコメントがなければ、その分は出さない
+assert.strictEqual(recFileName(DEFAULT_REC_FORMAT, { name: 'a', detail: '雑談' }, new Date(at(2026, 11, 17))), 'a(261117-00時00分)雑談');
+// ペカレコの初めの書式か（保存は「_」区切り、画面の見本はスペース区切り）
+assert.ok(isPecarecDefaultFormat('$0_$Y$M$D_$w_$h$m$s_$x'));
+assert.ok(isPecarecDefaultFormat('$0 $Y$M$D $w $h$m$s $x'));
+assert.ok(!isPecarecDefaultFormat('$0_$Y$M$D_$w_$h$m$s'));
+assert.ok(!isPecarecDefaultFormat(''));
+// テンプレートの先頭はおすすめ。ペカレコの「デフォルト」はペカレコの初めの書式
+assert.strictEqual(REC_TEMPLATES[0][1], DEFAULT_REC_FORMAT);
+assert.ok(isPecarecDefaultFormat(REC_TEMPLATES[1][1]));
 // ペカレコの書式・文字変換（画面の見本と同じ）
 {
   const d = new Date(at(2026, 11, 17, 18, 49, 55) + 26);

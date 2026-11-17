@@ -14,7 +14,7 @@ import { initRecUI } from './rec-ui.js';
 import { initNotifyLog } from './notify-log.js';
 import { FAV_DEFAULT, favColor, applyFavCss } from './fav-color.js';
 import { initNarrowUI } from './narrow-ui.js';
-import { canRecord, cleanDir, DEFAULT_REC_FORMAT, REC_TOKENS, recFileName } from './recording.js';
+import { canRecord, cleanDir, DEFAULT_REC_FORMAT, LEGACY_REC_FORMAT, REC_TOKENS, REC_TEMPLATES, REC_SAMPLE, recFileName } from './recording.js';
 import { initMigrateUI } from './migrate-ui.js';
 import { initYpErrorsUI } from './yp-errors-ui.js';
 import { initUpdateCheck } from './update-check.js';
@@ -79,10 +79,11 @@ const defaults = {
   soundPath: '',         // 通知音のファイル（wav / mp3 / ogg）
   recDir: '',            // 録画の保存先（空なら初回にビデオ フォルダの中を使う）
   recSubFolder: true,    // チャンネルごとにフォルダを作る
-  recFormat: DEFAULT_REC_FORMAT, // 録画のファイル名の書式（ペカレコと同じ記号）
+  recFormat: DEFAULT_REC_FORMAT, // 録画のファイル名の書式（ペカレコと同じ記号）。新しく使い始める人は PecaList のデフォルト
   recUnderbar: true,     // ファイル名の半角スペースを「_」に（ペカレコの初めと同じ）
   recFullwidth: false,   // ファイル名の記号を全角に（しないときは「_」）
   recMax: 0,             // 同時に録画する数の上限（0 は制限なし）
+  recSplitDetail: false, // 配信の詳細が変わったら、録画のファイルを区切る
   recWaitMin: 10,        // 切れたとき、戻ってくるのを待つ時間（分）
   recNotify: true,       // 録画を始めたとき・終わったときに通知する
   // YP：{ enabled, name, url }（上から順に取得して並べる）
@@ -111,6 +112,8 @@ async function loadSettings() {
     if (s) saveSettings();
   }
   if (s) Object.assign(settings, s);
+  // 0.2.34 までから使っている人の録画の名前は変えない（PecaList のデフォルトの書式は新しく使い始める人だけ）
+  if (s && !('recFormat' in s)) settings.recFormat = LEGACY_REC_FORMAT;
   // 0.2.8〜0.2.9 の初期の幅（340）のままなら、新しい初期の幅（いちばん細い）にする
   if (settings.dockWidth === 340) settings.dockWidth = defaults.dockWidth;
   // 重なり方を自分で選んでいなければ、初めの値（最下面）にする（0.2.9〜0.2.11 の初めの値は「常に手前」だった）
@@ -1859,6 +1862,7 @@ function openSettings() {
   $('opt-rec-underbar').checked = settings.recUnderbar;
   $('opt-rec-fullwidth').checked = settings.recFullwidth;
   $('opt-rec-max').value = settings.recMax;
+  $('opt-rec-split').checked = settings.recSplitDetail;
   showRecFormatPreview();
   $('opt-rec-wait').value = settings.recWaitMin;
   $('opt-rec-notify').checked = settings.recNotify;
@@ -1939,6 +1943,7 @@ $('settings-save').addEventListener('click', () => {
   settings.recUnderbar = $('opt-rec-underbar').checked;
   settings.recFullwidth = $('opt-rec-fullwidth').checked;
   settings.recMax = Math.min(99, Math.max(0, parseInt($('opt-rec-max').value, 10) || 0));
+  settings.recSplitDetail = $('opt-rec-split').checked;
   settings.recWaitMin = Math.min(360, Math.max(1, parseInt($('opt-rec-wait').value, 10) || 10));
   settings.recNotify = $('opt-rec-notify').checked;
   settings.activityEnabled = $('opt-activity').checked;
@@ -2027,7 +2032,6 @@ $('rec-dir-browse').addEventListener('click', async () => {
 });
 
 // 録画のファイル名：見本の配信で、今の時刻の名前を出す
-const REC_SAMPLE = { name: 'チャンネル名', genre: 'ジャンル', detail: '詳細', comment: 'コメント', trackArtist: 'アーティスト', trackTitle: 'タイトル', trackAlbum: 'アルバム' };
 function showRecFormatPreview() {
   $('rec-format-preview').textContent = recFileName($('opt-rec-format').value.trim() || DEFAULT_REC_FORMAT, REC_SAMPLE, new Date(),
     { underbar: $('opt-rec-underbar').checked, fullwidth: $('opt-rec-fullwidth').checked }) + '.flv';
@@ -2044,6 +2048,13 @@ $('opt-rec-token').addEventListener('change', (e) => {
   showRecFormatPreview();
 });
 for (const id of ['opt-rec-format', 'opt-rec-underbar', 'opt-rec-fullwidth']) $(id).addEventListener('input', showRecFormatPreview);
+$('opt-rec-template').append(...REC_TEMPLATES.map(([label, fmt]) => { const o = document.createElement('option'); o.value = fmt; o.textContent = label; return o; }));
+$('opt-rec-template').addEventListener('change', (e) => {
+  if (!e.target.value) return;
+  $('opt-rec-format').value = e.target.value;
+  e.target.value = '';
+  showRecFormatPreview();
+});
 
 // ---- キー操作 ----
 window.addEventListener('keydown', (e) => {

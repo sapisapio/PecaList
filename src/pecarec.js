@@ -7,7 +7,7 @@
 
 import { newBlock } from './blocks.js';
 import { cleanYpUrl } from './yp.js';
-import { cleanDir } from './recording.js';
+import { cleanDir, DEFAULT_REC_FORMAT, isPecarecDefaultFormat } from './recording.js';
 
 // ペカレコの設定に書かれた場所を、ペカレコのフォルダから見た場所として直す（「PCRPlayer\PCRPlayer.exe」など）
 export function resolvePath(p, base) {
@@ -87,7 +87,10 @@ export function parsePecarecXml(text, dir) {
   // ファイル名の書式（<format filename underbar fullwidth/>）と、同時に録画する数（<limit><download enable max/>）
   const fmt = q('download > format');
   if (fmt && attr(fmt, 'filename')?.trim()) {
-    out.recFormat = attr(fmt, 'filename').trim();
+    // ペカレコの初めの書式（旧デフォルト）のままなら、PecaList のデフォルトにする。変えていた人の書式はそのまま
+    const f = attr(fmt, 'filename').trim();
+    out.recFormat = isPecarecDefaultFormat(f) ? DEFAULT_REC_FORMAT : f;
+    out.recFormatWasDefault = isPecarecDefaultFormat(f);
     out.recUnderbar = bool(fmt, 'underbar');
     out.recFullwidth = bool(fmt, 'fullwidth');
   }
