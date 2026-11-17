@@ -84,6 +84,15 @@ export function parsePecarecXml(text, dir) {
     out.recDir = cleanDir(resolvePath(attr(dl, 'path'), dir));
     out.recSubFolder = bool(dl, 'subFolder');
   }
+  // ファイル名の書式（<format filename underbar fullwidth/>）と、同時に録画する数（<limit><download enable max/>）
+  const fmt = q('download > format');
+  if (fmt && attr(fmt, 'filename')?.trim()) {
+    out.recFormat = attr(fmt, 'filename').trim();
+    out.recUnderbar = bool(fmt, 'underbar');
+    out.recFullwidth = bool(fmt, 'fullwidth');
+  }
+  const lim = q('download > limit > download');
+  if (lim) out.recMax = bool(lim, 'enable') ? Math.min(99, Math.max(0, int(lim, 'max', 0))) : 0;
 
   // 通知
   const nb = q('notify > base');

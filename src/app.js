@@ -14,7 +14,7 @@ import { initRecUI } from './rec-ui.js';
 import { initNotifyLog } from './notify-log.js';
 import { FAV_DEFAULT, favColor, applyFavCss } from './fav-color.js';
 import { initNarrowUI } from './narrow-ui.js';
-import { canRecord, cleanDir } from './recording.js';
+import { canRecord, cleanDir, DEFAULT_REC_FORMAT, REC_TOKENS, recFileName } from './recording.js';
 import { initMigrateUI } from './migrate-ui.js';
 import { initYpErrorsUI } from './yp-errors-ui.js';
 import { initUpdateCheck } from './update-check.js';
@@ -79,6 +79,10 @@ const defaults = {
   soundPath: '',         // 通知音のファイル（wav / mp3 / ogg）
   recDir: '',            // 録画の保存先（空なら初回にビデオ フォルダの中を使う）
   recSubFolder: true,    // チャンネルごとにフォルダを作る
+  recFormat: DEFAULT_REC_FORMAT, // 録画のファイル名の書式（ペカレコと同じ記号）
+  recUnderbar: true,     // ファイル名の半角スペースを「_」に（ペカレコの初めと同じ）
+  recFullwidth: false,   // ファイル名の記号を全角に（しないときは「_」）
+  recMax: 0,             // 同時に録画する数の上限（0 は制限なし）
   recWaitMin: 10,        // 切れたとき、戻ってくるのを待つ時間（分）
   recNotify: true,       // 録画を始めたとき・終わったときに通知する
   // YP：{ enabled, name, url }（上から順に取得して並べる）
@@ -1851,6 +1855,11 @@ function openSettings() {
   $('sound-path').value = settings.soundPath;
   $('rec-dir').value = settings.recDir;
   $('opt-rec-sub').checked = settings.recSubFolder;
+  $('opt-rec-format').value = settings.recFormat;
+  $('opt-rec-underbar').checked = settings.recUnderbar;
+  $('opt-rec-fullwidth').checked = settings.recFullwidth;
+  $('opt-rec-max').value = settings.recMax;
+  showRecFormatPreview();
   $('opt-rec-wait').value = settings.recWaitMin;
   $('opt-rec-notify').checked = settings.recNotify;
   $('opt-activity').checked = settings.activityEnabled;
@@ -1926,6 +1935,10 @@ $('settings-save').addEventListener('click', () => {
   settings.soundPath = $('sound-path').value.trim();
   settings.recDir = cleanDir($('rec-dir').value);
   settings.recSubFolder = $('opt-rec-sub').checked;
+  settings.recFormat = $('opt-rec-format').value.trim() || DEFAULT_REC_FORMAT;
+  settings.recUnderbar = $('opt-rec-underbar').checked;
+  settings.recFullwidth = $('opt-rec-fullwidth').checked;
+  settings.recMax = Math.min(99, Math.max(0, parseInt($('opt-rec-max').value, 10) || 0));
   settings.recWaitMin = Math.min(360, Math.max(1, parseInt($('opt-rec-wait').value, 10) || 10));
   settings.recNotify = $('opt-rec-notify').checked;
   settings.activityEnabled = $('opt-activity').checked;
@@ -2012,6 +2025,25 @@ $('rec-dir-browse').addEventListener('click', async () => {
     : prompt('録画の保存先（画面確認用）');
   if (d) $('rec-dir').value = d;
 });
+
+// 録画のファイル名：見本の配信で、今の時刻の名前を出す
+const REC_SAMPLE = { name: 'チャンネル名', genre: 'ジャンル', detail: '詳細', comment: 'コメント', trackArtist: 'アーティスト', trackTitle: 'タイトル', trackAlbum: 'アルバム' };
+function showRecFormatPreview() {
+  $('rec-format-preview').textContent = recFileName($('opt-rec-format').value.trim() || DEFAULT_REC_FORMAT, REC_SAMPLE, new Date(),
+    { underbar: $('opt-rec-underbar').checked, fullwidth: $('opt-rec-fullwidth').checked }) + '.flv';
+}
+$('opt-rec-token').append(...REC_TOKENS.map(([v, label]) => { const o = document.createElement('option'); o.value = v; o.textContent = `${v}　${label}`; return o; }));
+$('opt-rec-token').addEventListener('change', (e) => {
+  const v = e.target.value, inp = $('opt-rec-format');
+  e.target.value = '';
+  if (!v) return;
+  const a = inp.selectionStart ?? inp.value.length, b = inp.selectionEnd ?? a;
+  inp.value = inp.value.slice(0, a) + v + inp.value.slice(b);
+  inp.focus();
+  inp.setSelectionRange(a + v.length, a + v.length);
+  showRecFormatPreview();
+});
+for (const id of ['opt-rec-format', 'opt-rec-underbar', 'opt-rec-fullwidth']) $(id).addEventListener('input', showRecFormatPreview);
 
 // ---- キー操作 ----
 window.addEventListener('keydown', (e) => {

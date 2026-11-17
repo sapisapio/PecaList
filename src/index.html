@@ -263,6 +263,11 @@
         <h3>録画</h3>
         <div class="field"><label>保存先</label><input id="rec-dir" spellcheck="false"><button class="btn" id="rec-dir-browse">参照</button></div>
         <div class="field"><label class="chk"><input type="checkbox" id="opt-rec-sub"> チャンネルごとにフォルダを作る</label></div>
+        <div class="field"><label>ファイル名</label><input id="opt-rec-format" spellcheck="false"><select id="opt-rec-token" style="flex:none;width:130px"><option value="">記号を入れる</option></select></div>
+        <p class="hint" id="rec-format-preview"></p>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-rec-underbar"> 半角スペースを「_」にする</label></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="opt-rec-fullwidth"> 記号 \ " . / : * ? &lt; &gt; | ; , を全角にする（しないときは「_」）</label></div>
+        <div class="field"><label>同時に録画する数</label><input id="opt-rec-max" type="number" min="0" max="99" style="flex:none;width:80px"> 件まで（0 は制限なし）</div>
         <div class="field"><label>切れたとき待つ時間</label><input id="opt-rec-wait" type="number" min="1" max="360" style="flex:none;width:80px"> 分</div>
         <p class="hint">この時間内に戻れば、同じファイルに続けて録画します。</p>
         <div class="field"><label class="chk"><input type="checkbox" id="opt-rec-notify"> 録画を始めたとき・終わったときに通知する</label></div>

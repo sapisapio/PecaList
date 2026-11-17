@@ -449,7 +449,7 @@ tr.event td.c-name { color: var(--accent); }
 
 .live-list { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 6px; }
 .rec-card {
-  display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto auto; align-items: center; gap: 4px 14px;
+  display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto auto auto; align-items: center; gap: 4px 14px;
   border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 14px; background: var(--panel-2); cursor: default;
 }
 .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--error);

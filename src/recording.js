@@ -9,9 +9,37 @@ const WEEK_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEK_JA = ['日', '月', '火', '水', '木', '金', '土'];
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 
-// ファイル名（拡張子なし）。ペカレコと同じ並び：チャンネル名_20261108_Sun_135520
-export function recFileBase(name, d) {
-  return `${name}_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${WEEK_EN[d.getDay()]}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+// 録画のファイル名の書式（ペカレコと同じ記号）。初めは今までの PecaList と同じ名前：チャンネル名_20261108_Sun_135520
+export const DEFAULT_REC_FORMAT = '$0_$Y$M$D_$w_$h$m$s';
+// 設定画面の「記号を入れる」に出すもの
+export const REC_TOKENS = [
+  ['$Y', '西暦（4桁）'], ['$y', '西暦（2桁）'], ['$M', '月'], ['$D', '日'], ['$w', '曜日（英字）'], ['$W', '曜日（漢字）'],
+  ['$h', '時'], ['$m', '分'], ['$s', '秒'], ['$x', 'ミリ秒'],
+  ['$0', 'チャンネル名'], ['$1', 'ジャンル'], ['$2', '詳細'], ['$3', 'コメント'], ['$4', 'アーティスト'], ['$5', 'タイトル'], ['$6', 'アルバム'],
+  ['$7', '[ジャンル - 詳細]'], ['$8', '「コメント」'], ['$9', 'アーティスト タイトル アルバム'],
+  ['$A', '[ジャンル-詳細]'], ['$B', 'ジャンル-詳細'], ['$C', 'ジャンル 詳細'],
+];
+// ペカレコで「特殊文字」とされている文字と、全角にしたときの文字
+const SPECIAL = { '\\': '＼', '"': '”', '.': '．', '/': '／', ':': '：', '*': '＊', '?': '？', '<': '＜', '>': '＞', '|': '｜', ';': '；', ',': '，' };
+
+// 書式からファイル名（拡張子なし）を作る。
+// opts.underbar：半角スペースを「_」に。opts.fullwidth：特殊文字を全角に（しないときは「_」。ペカレコと同じ）
+export function recFileName(format, ch, d, opts = {}) {
+  const t = (v) => String(v ?? '').trim();
+  const join = (sep, ...xs) => xs.map(t).filter(Boolean).join(sep);
+  const gd = (sep) => join(sep, ch.genre, ch.detail);
+  const map = {
+    Y: String(d.getFullYear()), y: pad(d.getFullYear() % 100), M: pad(d.getMonth() + 1), D: pad(d.getDate()),
+    w: WEEK_EN[d.getDay()], W: WEEK_JA[d.getDay()], h: pad(d.getHours()), m: pad(d.getMinutes()), s: pad(d.getSeconds()), x: pad(d.getMilliseconds(), 3),
+    0: t(ch.name), 1: t(ch.genre), 2: t(ch.detail), 3: t(ch.comment), 4: t(ch.trackArtist), 5: t(ch.trackTitle), 6: t(ch.trackAlbum),
+    7: gd(' - ') && `[${gd(' - ')}]`, 8: t(ch.comment) && `「${t(ch.comment)}」`, 9: join(' ', ch.trackArtist, ch.trackTitle, ch.trackAlbum),
+    A: gd('-') && `[${gd('-')}]`, B: gd('-'), C: gd(' '), '$': '$',
+  };
+  let out = String(format || DEFAULT_REC_FORMAT).replace(/\$(.)/g, (all, k) => (k in map ? map[k] : all));
+  out = out.replace(/[\u0000-\u001f]/g, ' ');
+  if (opts.underbar) out = out.replace(/ /g, '_');
+  out = out.replace(/[\\"./:*?<>|;,]/g, (c) => (opts.fullwidth ? SPECIAL[c] : '_'));
+  return out.trim() || map[0] || 'rec';
 }
 
 // 1:24:08 / 0:42:51

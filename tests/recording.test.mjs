@@ -1,10 +1,25 @@
 import assert from 'node:assert';
-import { recFileBase, formatDuration, formatHours, formatBytes, formatSpan, inRange, groupByDay, weeklyByFilter, isHeavy, daysLeft, canRecord } from '../src/recording.js';
+import { recFileName, DEFAULT_REC_FORMAT, formatDuration, formatHours, formatBytes, formatSpan, inRange, groupByDay, weeklyByFilter, isHeavy, daysLeft, canRecord } from '../src/recording.js';
 
 const at = (y, mo, d, h = 0, mi = 0, s = 0) => new Date(y, mo - 1, d, h, mi, s).getTime();
 
 // ファイル名はペカレコと同じ並び
-assert.strictEqual(recFileBase('みかん', new Date(at(2026, 11, 8, 13, 55, 20))), 'みかん_20261108_Sun_135520');
+assert.strictEqual(recFileName(DEFAULT_REC_FORMAT, { name: 'みかん' }, new Date(at(2026, 11, 8, 13, 55, 20))), 'みかん_20261108_Sun_135520');
+// ペカレコの書式・文字変換（画面の見本と同じ）
+{
+  const d = new Date(at(2026, 11, 17, 18, 49, 55) + 26);
+  const ch = { name: 'チャンネル名', genre: 'ジャンル', detail: '詳細', comment: 'コメント', trackArtist: 'アーティスト', trackTitle: 'タイトル', trackAlbum: 'アルバム' };
+  const u = { underbar: true };
+  assert.strictEqual(recFileName('$0 $Y$M$D $w $h$m$s $x', ch, d, u), 'チャンネル名_20261117_Tue_184955_026');
+  assert.strictEqual(recFileName('$0 $Y$M$D $w $h$m$s $7$8$9', ch, d, u), 'チャンネル名_20261117_Tue_184955_[ジャンル_-_詳細]「コメント」アーティスト_タイトル_アルバム');
+  assert.strictEqual(recFileName('$0($Y$M$D$w$h$m$s)$A$8$4$5$6', ch, d, u), 'チャンネル名(20261117Tue184955)[ジャンル-詳細]「コメント」アーティストタイトルアルバム');
+  assert.strictEqual(recFileName('$0 $Y年$M月$D日($W)$h時$m分$s秒', ch, d, u), 'チャンネル名_2026年11月17日(火)18時49分55秒');
+  // 空の項目は括弧ごと出さない。$ は $、知らない記号はそのまま
+  assert.strictEqual(recFileName('$0$7$8$$Z', { name: 'a' }, d), 'a$Z');
+  // 特殊文字：全角にしないときは「_」、全角にするときは全角。スペースはそのまま
+  assert.strictEqual(recFileName('$0', { name: 'a b.c/d:e?f' }, d), 'a b_c_d_e_f');
+  assert.strictEqual(recFileName('$0', { name: 'a b.c/d:e?f' }, d, { fullwidth: true }), 'a b．c／d：e？f');
+}
 
 assert.strictEqual(formatDuration(5048000), '1:24:08');
 assert.strictEqual(formatDuration(0), '0:00:00');

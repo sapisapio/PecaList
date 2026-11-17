@@ -27,6 +27,10 @@ const RETRY_DELAY: Duration = Duration::from_secs(5);
 const STATUS_EVERY: Duration = Duration::from_secs(1);
 /// ファイルに書き出す間隔（エクスプローラーで大きさが分かるように）
 const FLUSH_EVERY: Duration = Duration::from_secs(2);
+/// 録画中も、ファイルの先頭の長さ・早送りの目印をこの間隔で書き直す（落ちたときにも長さが残るように）
+const HEADER_EVERY: Duration = Duration::from_secs(60);
+/// 録画中のファイルを再生するとき、先頭の書き直しを待つ時間の上限
+const HEADER_WAIT: Duration = Duration::from_millis(1500);
 /// ペカステに「つなぎ直し」を頼む間隔の下限
 const BUMP_EVERY: Duration = Duration::from_secs(60);
 
@@ -41,6 +45,7 @@ struct FileWriter {
   keyframes: Vec<Keyframe>,
   last_ms: u32,
   last_flush: Instant,
+  last_header: Instant,
 }
 
 impl FileWriter {
@@ -57,6 +62,7 @@ impl FileWriter {
       keyframes: Vec::new(),
       last_ms: 0,
       last_flush: Instant::now(),
+      last_header: Instant::now(),
     };
     w.put(&flv::file_header(video_config.is_some(), true))?;
     let script = flv::build_script(w.meta.as_deref(), 0, 0, &[]);
@@ -86,6 +92,19 @@ impl FileWriter {
       self.out.flush()?;
       self.last_flush = Instant::now();
     }
+    Ok(())
+  }
+
+  /// 録画を続けたまま、ここまでの長さ・大きさ・早送り用の目印を先頭に書き込む
+  /// （録画中のファイルをプレイヤーで開いても、ここまではシークできるように）
+  fn update_header(&mut self) -> std::io::Result<()> {
+    self.out.flush()?;
+    let script = flv::build_script(self.meta.as_deref(), self.last_ms, self.pos, &self.keyframes);
+    let file = self.out.get_mut();
+    file.seek(SeekFrom::Start(flv::SCRIPT_DATA_POS))?;
+    file.write_all(&script)?;
+    file.seek(SeekFrom::Start(self.pos))?;
+    self.last_header = Instant::now();
     Ok(())
   }
 
@@ -158,6 +177,8 @@ struct FileEvent {
 
 struct Control {
   stop: AtomicBool,
+  /// 画面から「先頭を今の内容で書き直して」と頼まれている
+  header: AtomicBool,
   wake: tokio::sync::Notify,
 }
 
@@ -251,7 +272,7 @@ pub fn rec_start(app: tauri::AppHandle, recs: tauri::State<'_, Recorders>, req: 
   }
   let dir = if req.sub.is_empty() { dir.to_path_buf() } else { dir.join(safe_name(&req.sub)) };
   let id = recs.next.fetch_add(1, Ordering::SeqCst) + 1;
-  let control = Arc::new(Control { stop: AtomicBool::new(false), wake: tokio::sync::Notify::new() });
+  let control = Arc::new(Control { stop: AtomicBool::new(false), header: AtomicBool::new(false), wake: tokio::sync::Notify::new() });
   let job = Job {
     id,
     app: app.clone(),
@@ -266,6 +287,19 @@ pub fn rec_start(app: tauri::AppHandle, recs: tauri::State<'_, Recorders>, req: 
   let handle = tauri::async_runtime::spawn(job.run());
   recs.map.lock().unwrap().insert(id, (control, handle));
   Ok(id)
+}
+
+/// 録画中のファイルの先頭を今の内容で書き直してもらう（そのあと画面が rec_open で開く）。
+/// 間に合わなくても、1分以内に書き直した内容で開ける
+#[tauri::command]
+pub async fn rec_refresh_header(recs: tauri::State<'_, Recorders>, id: u64) -> Result<(), String> {
+  let control = recs.map.lock().unwrap().get(&id).map(|(c, _)| c.clone()).ok_or("この録画はもう終わっています")?;
+  control.header.store(true, Ordering::SeqCst);
+  let until = Instant::now() + HEADER_WAIT;
+  while control.header.load(Ordering::SeqCst) && Instant::now() < until {
+    tokio::time::sleep(Duration::from_millis(50)).await;
+  }
+  Ok(())
 }
 
 #[tauri::command]
@@ -396,6 +430,18 @@ impl Job {
     }
   }
 
+  /// 頼まれていれば（または決めた間隔がたっていれば）、ファイルの先頭を今の内容で書き直す
+  fn refresh_header(&self, p: &mut Progress, force: bool) -> Result<(), String> {
+    let asked = self.control.header.load(Ordering::SeqCst);
+    if let Some(w) = p.writer.as_mut() {
+      if force || asked || w.last_header.elapsed() >= HEADER_EVERY {
+        w.update_header().map_err(|e| format!("書き込めませんでした: {e}"))?;
+      }
+    }
+    if asked { self.control.header.store(false, Ordering::SeqCst); }
+    Ok(())
+  }
+
   fn handle(&self, p: &mut Progress, actions: Vec<Action>) -> Result<(), String> {
     for a in actions {
       match a {
@@ -412,6 +458,7 @@ impl Job {
           }
           p.last_media = Instant::now();
           p.state = "recording";
+          self.refresh_header(p, false)?;
         }
       }
     }
@@ -526,6 +573,11 @@ impl Job {
       if self.stopped() {
         break "stopped";
       }
+      // 切れている間も、録画中のファイルを開けばそこまでシークできるように
+      if let Err(e) = self.refresh_header(&mut p, true) {
+        p.error = e;
+        break "error";
+      }
       // 切れた：決めた時間を過ぎても戻ってこなければ終わる
       if p.last_media.elapsed() >= self.wait {
         break "gone";
@@ -539,7 +591,14 @@ impl Job {
         self.bump(&client).await;
       }
       if self.stopped() { break "stopped"; }
-      let _ = tokio::time::timeout(RETRY_DELAY, self.control.wake.notified()).await;
+      // 待っている間に再生を頼まれたら、すぐ先頭を書き直す
+      let until = Instant::now() + RETRY_DELAY;
+      while Instant::now() < until && !self.stopped() {
+        let _ = tokio::time::timeout(Duration::from_millis(200), self.control.wake.notified()).await;
+        if self.control.header.load(Ordering::SeqCst) {
+          if let Err(e) = self.refresh_header(&mut p, false) { p.error = e; }
+        }
+      }
     };
     self.close_file(&mut p);
     // read_once の応答は既に破棄され、録画の受信接続は閉じている。
@@ -839,6 +898,22 @@ mod tests {
     w.out.flush().unwrap();
     drop(w);
     assert_eq!(probe(&crashed).unwrap().ms, 7500);
+    // 録画中に先頭を書き直す：ほかから開くとそこまでの長さが読め、そのあとも続けて書ける
+    let live = dir.join("録画中.flv");
+    let mut w = FileWriter::open(live.clone(), None, Some(vec![0x17, 0, 0, 0, 1]), None).unwrap();
+    w.write(&Tag { kind: flv::TAG_VIDEO, ts: 0, data: vec![0x17, 1, 0, 0, 0, 9] }, true).unwrap();
+    w.write(&Tag { kind: flv::TAG_VIDEO, ts: 3000, data: vec![0x17, 1, 0, 0, 0, 9] }, true).unwrap();
+    w.update_header().unwrap();
+    let head = std::fs::read(&live).unwrap();
+    assert_eq!(head.len() as u64, w.pos);
+    assert_eq!(flv::meta_duration_ms(&head[flv::SCRIPT_DATA_POS as usize..]), Some(3000));
+    assert_eq!(Parser::new().push(&head).unwrap().len(), 4);
+    w.write(&Tag { kind: flv::TAG_VIDEO, ts: 5000, data: vec![0x17, 1, 0, 0, 0, 9] }, true).unwrap();
+    let done = w.finish().unwrap();
+    let bytes = std::fs::read(&live).unwrap();
+    assert_eq!(bytes.len() as u64, done.bytes);
+    assert_eq!(Parser::new().push(&bytes).unwrap().len(), 5);
+    assert_eq!(probe(&live).unwrap().ms, 5000);
     let _ = std::fs::remove_dir_all(&dir);
   }
 }

@@ -6,16 +6,19 @@
 // 実際の受け取りと保存は Rust 側（recorder.rs）が行う。
 
 import {
-  recFileBase, formatDuration, formatHours, formatBytes, formatSpan,
+  recFileName, formatDuration, formatHours, formatBytes, formatSpan,
   inRange, groupByDay, weeklyByFilter, isHeavy, daysLeft, canRecord,
 } from './recording.js';
 import { loadStore, saveStoreSoon } from './store.js';
+import { cleanDescription } from './yp.js';
 
 const tauri = window.__TAURI__;
 const $ = (id) => document.getElementById(id);
 const MAX_HISTORY = 3000;
-// YP から消えたまま、これだけ更新が続いたら、戻ってくるのを待つのをやめる（ペカレコと同じ3回）
-const GONE_REFRESHES = 3;
+// チャンネル一覧から消えたまま、これだけ更新が続いたら、配信が終わったとみなして録画を仕上げる。
+// データが届き続けていても止める（終わった配信が、どこかの古いリレーから流れ続けることがあるため）。
+// 1回だけ消えるYPの揺れで録画が分かれないよう、2回続けて消えたときにする（取得に失敗したYPは前の一覧が残るので数えない）
+const GONE_REFRESHES = 2;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -73,6 +76,11 @@ export function initRecUI(ctx) {
     const cid = ch.id.toUpperCase();
     if (recOf(cid) || starting.has(cid)) { if (!auto) ctx.toast(`「${ch.name}」はもう録画しています`); return; }
     if (!settings.recDir) { ctx.toast('録画の保存先を決めてください（⚙ 設定）'); return; }
+    // 同時に録画する数の上限（自動録画は、空きができたあとの更新で始まる）
+    if (settings.recMax > 0 && active.size + starting.size >= settings.recMax) {
+      if (!auto) ctx.toast(`同時に録画できるのは ${settings.recMax} 件までです（⚙ 設定）`);
+      return;
+    }
     starting.add(cid);
     try {
       const blocked = await ctx.checkBlock(ch, !!auto);
@@ -84,7 +92,8 @@ export function initRecUI(ctx) {
         req: {
           peercast: settings.peercast, channelId: cid, tip: ch.tip || '',
           dir: settings.recDir, sub: settings.recSubFolder ? ch.name : '',
-          base: recFileBase(ch.name, new Date()), waitSec: settings.recWaitMin * 60,
+          // 詳細は一覧と同じく <Open> / <Free> を外す
+          base: recFileName(settings.recFormat, { ...ch, detail: cleanDescription(ch.detail, settings.showOpenFree) }, new Date(), { underbar: settings.recUnderbar, fullwidth: settings.recFullwidth }), waitSec: settings.recWaitMin * 60,
         },
       });
       userStopped.delete(cid);
@@ -195,8 +204,7 @@ export function initRecUI(ctx) {
       if(options.p2pEvent) continue; // 通常YPの更新周期で終了待ち回数を数える
       if (present.has(r.channelId)) { r.gone = 0; continue; }
       r.gone++;
-      // 中身が届かず、YP からも消えた：配信が終わったとみなして待つのをやめる
-      if (r.gone >= GONE_REFRESHES && r.state !== 'recording') invoke('rec_stop', { id: r.id }).catch(() => {});
+      if (r.gone >= GONE_REFRESHES) invoke('rec_stop', { id: r.id }).catch(() => {});
     }
     if (!settings.recDir) return;
     for (const ch of chans) {
@@ -251,7 +259,9 @@ export function initRecUI(ctx) {
       if (r.seams > 0) why.appendChild(el('span', '', `${r.seams}回つなぎ直し`));
       if (r.files.length > 0) why.appendChild(el('span', '', `配信の形式が変わったので、${r.files.length + 1}つ目のファイルです`));
       if (r.error && r.state !== 'recording') why.appendChild(el('span', 'err', r.error));
-      card.append(el('span', 'rec-dot'), nm, big1, big2, btn('btn sm', '■ 停止', () => stop(r.id)), why);
+      const play = btn('btn sm', '追っかけ再生', () => playLive(r), '録画を止めずに、ここまでの録画を開きます');
+      play.disabled = !r.item;
+      card.append(el('span', 'rec-dot'), nm, big1, big2, play, btn('btn sm', '■ 停止', () => stop(r.id)), why);
       return card;
     }));
   }
@@ -414,6 +424,14 @@ export function initRecUI(ctx) {
   }
 
   // ---- ファイルの操作 ----
+  // 録画中のファイル：録画を止めずに、先頭の長さ・目印を今の内容にしてから開く（追いかけ再生）
+  async function playLive(r) {
+    if (!r.item) return;
+    try {
+      await invoke('rec_refresh_header', { id: r.id }).catch(() => {});
+      await invoke('rec_open', { path: r.item.path });
+    } catch (e) { ctx.toast(String(e)); }
+  }
   async function openFile(it) {
     try { await invoke('rec_open', { path: it.path }); } catch (e) { ctx.toast(String(e)); checkMissing(); }
   }
